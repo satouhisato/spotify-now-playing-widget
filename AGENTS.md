@@ -19,7 +19,7 @@ Spotify data comes from the Spotify Web API. Authentication uses Authorization C
 
 ## Current behavior and known limitations
 
-- Playback information is polled about every second while playing and every three seconds while idle, with backoff after errors.
+- Playback information is polled about every 400 ms while playing and every second while idle, with backoff after errors.
 - The width can vary from 180 px to 520 px and the height from 72 px to 180 px.
 - Marquee animation pauses during resize and track transitions, then restarts after remeasurement.
 - Hovering reveals a settings button for transition duration, background blur, and text scale; values persist in local storage.

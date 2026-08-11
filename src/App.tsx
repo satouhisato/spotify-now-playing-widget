@@ -41,8 +41,8 @@ type DisplaySettings = {
   textScale: number;
 };
 
-const ACTIVE_POLL_MS = 1000;
-const IDLE_POLL_MS = 3000;
+const ACTIVE_POLL_MS = 400;
+const IDLE_POLL_MS = 1000;
 const RESIZE_SETTLE_MS = 180;
 const IMAGE_PRELOAD_TIMEOUT_MS = 800;
 const SETTINGS_STORAGE_KEY = "spotify_widget_display_settings";
