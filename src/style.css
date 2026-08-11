@@ -45,6 +45,91 @@ input {
 }
 
 /*
+ * 曲変更時は古い表示と新しい表示を短時間だけ重ねる。
+ * ウィンドウ自体は動かさず、中身だけをわずかに移動させる。
+ */
+.trackLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  isolation: isolate;
+}
+
+.trackLayer.current,
+.trackLayer.entering {
+  z-index: 2;
+}
+
+.trackLayer.leaving {
+  z-index: 1;
+}
+
+.trackLayer.entering .ambientCover,
+.trackLayer.entering .darkOverlay {
+  animation: trackBackgroundIn 260ms ease-out both;
+}
+
+.trackLayer.leaving .ambientCover,
+.trackLayer.leaving .darkOverlay {
+  animation: trackBackgroundOut 260ms ease-in both;
+}
+
+.trackLayer.entering .cover,
+.trackLayer.entering .meta {
+  animation: trackContentIn 260ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.trackLayer.leaving .cover,
+.trackLayer.leaving .meta {
+  animation: trackContentOut 260ms cubic-bezier(0.4, 0, 0.8, 0.25) both;
+}
+
+@keyframes trackBackgroundIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes trackBackgroundOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes trackContentIn {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes trackContentOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+}
+
+/*
  * ぼかし幕の表示領域。
  *
  * 100vhはウィンドウの高さ。
@@ -573,6 +658,15 @@ input {
 }
 
 /*
+ * 横幅変更中と曲切り替え中はマーキーを先頭位置で止める。
+ * リサイズ完了後にReact側で再計測し、必要な場合だけ再スタートする。
+ */
+.player.marqueePaused .marqueeTrack.isScrolling {
+  animation: none;
+  transform: translateX(0);
+}
+
+/*
  * Marquee内では、以前の省略表示を無効にする。
  */
 .marqueeTrack .title,
@@ -617,4 +711,22 @@ input {
 .marqueeSpace {
   display: inline-block;
   flex: 0 0 32px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trackLayer.entering .ambientCover,
+  .trackLayer.entering .darkOverlay,
+  .trackLayer.leaving .ambientCover,
+  .trackLayer.leaving .darkOverlay,
+  .trackLayer.entering .cover,
+  .trackLayer.entering .meta,
+  .trackLayer.leaving .cover,
+  .trackLayer.leaving .meta {
+    animation: none;
+  }
+
+  .marqueeTrack.isScrolling {
+    animation: none;
+    transform: translateX(0);
+  }
 }

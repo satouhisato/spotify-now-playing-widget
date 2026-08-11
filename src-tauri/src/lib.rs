@@ -17,11 +17,14 @@ struct Tokens {
 }
 #[derive(Serialize)]
 struct Track {
+    track_key: String,
     title: String,
     artists: String,
     image_url: Option<String>,
     is_playing: bool,
     spotify_url: Option<String>,
+    duration_ms: Option<u64>,
+    progress_ms: Option<u64>,
 }
 fn token_path() -> PathBuf {
     let mut p = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
@@ -161,18 +164,36 @@ async fn now_playing() -> Result<Option<Track>, String> {
                 .join(", ")
         })
         .unwrap_or_default();
+    let title = item["name"].as_str().unwrap_or("Unknown").to_string();
+    let spotify_url = item["external_urls"]["spotify"]
+        .as_str()
+        .map(str::to_string);
+    let track_key = item["uri"]
+        .as_str()
+        .or(spotify_url.as_deref())
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{title}\u{1f}{artists}"));
+    let image_url = item["album"]["images"]
+        .as_array()
+        .and_then(|a| a.first())
+        .and_then(|x| x["url"].as_str())
+        .or_else(|| {
+            item["images"]
+                .as_array()
+                .and_then(|a| a.first())
+                .and_then(|x| x["url"].as_str())
+        })
+        .map(str::to_string);
+
     Ok(Some(Track {
-        title: item["name"].as_str().unwrap_or("Unknown").into(),
+        track_key,
+        title,
         artists,
-        image_url: item["album"]["images"]
-            .as_array()
-            .and_then(|a| a.first())
-            .and_then(|x| x["url"].as_str())
-            .map(str::to_string),
+        image_url,
         is_playing: j["is_playing"].as_bool().unwrap_or(false),
-        spotify_url: item["external_urls"]["spotify"]
-            .as_str()
-            .map(str::to_string),
+        spotify_url,
+        duration_ms: item["duration_ms"].as_u64(),
+        progress_ms: j["progress_ms"].as_u64(),
     }))
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
