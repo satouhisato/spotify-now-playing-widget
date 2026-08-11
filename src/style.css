@@ -37,9 +37,11 @@ input {
   height: 100%;
 
   --cover-slide-distance: 28px;
-  --cover-slide-distance-negative: -28px;
+  --track-exit-distance-negative: -10px;
   --background-underlap: 10px;
   --track-fade-duration: 280ms;
+  --track-exit-duration: 220ms;
+  --track-background-fade-duration: 500ms;
   --track-slide-in-easing: cubic-bezier(0.42, 0, 0.58, 1);
   --track-slide-out-easing: cubic-bezier(0.42, 0, 0.58, 1);
 
@@ -75,12 +77,8 @@ input {
 .trackLayer.entering .ambientCover,
 .trackLayer.entering .darkOverlay {
   animation:
-    trackBackgroundIn
-    var(--track-transition-duration, 1600ms)
-    var(--track-slide-in-easing)
-    both,
     trackFadeIn
-    var(--track-fade-duration, 280ms)
+    var(--track-background-fade-duration, 500ms)
     ease-out
     both;
 }
@@ -88,12 +86,8 @@ input {
 .trackLayer.leaving .ambientCover,
 .trackLayer.leaving .darkOverlay {
   animation:
-    trackBackgroundOut
-    var(--track-transition-duration, 1600ms)
-    var(--track-slide-out-easing)
-    both,
     trackFadeOut
-    var(--track-fade-duration, 280ms)
+    var(--track-background-fade-duration, 500ms)
     ease-in
     both;
 }
@@ -104,6 +98,7 @@ input {
     trackContentIn
     var(--track-transition-duration, 1600ms)
     var(--track-slide-in-easing)
+    var(--track-entry-delay, 220ms)
     both,
     trackFadeIn
     var(--track-fade-duration, 280ms)
@@ -115,37 +110,13 @@ input {
 .trackLayer.leaving .meta {
   animation:
     trackContentOut
-    var(--track-transition-duration, 1600ms)
+    var(--track-exit-duration, 220ms)
     var(--track-slide-out-easing)
     both,
     trackFadeOut
-    var(--track-fade-duration, 280ms)
+    var(--track-exit-duration, 220ms)
     ease-in
     both;
-}
-
-@keyframes trackBackgroundIn {
-  from {
-    right: var(--cover-slide-distance, 28px);
-    transform: translateX(var(--cover-slide-distance, 28px));
-  }
-
-  to {
-    right: 0;
-    transform: translateX(0);
-  }
-}
-
-@keyframes trackBackgroundOut {
-  from {
-    right: 0;
-    transform: translateX(0);
-  }
-
-  to {
-    right: var(--cover-slide-distance-negative, -28px);
-    transform: translateX(var(--cover-slide-distance-negative, -28px));
-  }
 }
 
 @keyframes trackFadeIn {
@@ -184,7 +155,7 @@ input {
   }
 
   to {
-    transform: translateX(var(--cover-slide-distance-negative, -28px));
+    transform: translateX(var(--track-exit-distance-negative, -10px));
   }
 }
 
