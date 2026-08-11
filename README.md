@@ -25,6 +25,11 @@ npm run tauri build
 ```
 生成物は `src-tauri/target/release/bundle/` に入ります。
 
+## 5. Windowsでの通常利用
+`src-tauri/target/release/bundle/nsis/` に生成されたセットアップEXEを使ってインストールし、スタートメニューから起動します。通常利用ではPowerShellや開発用ターミナルを開いておく必要はありません。
+
+インストール版を初めて起動すると、Windowsへのサインイン時に自動起動するよう登録されます。開発版の起動では自動起動設定を変更しません。
+
 ## 操作
 - カードの空いている部分をドラッグ: 移動
 - 辺・四隅をドラッグ: リサイズ
