@@ -36,6 +36,10 @@ input {
   width: 100%;
   height: 100%;
 
+  --cover-slide-distance: 28px;
+  --cover-slide-distance-negative: -28px;
+  --background-underlap: 44px;
+
   overflow: hidden;
 
   background: transparent;
@@ -124,7 +128,7 @@ input {
 @keyframes trackContentIn {
   from {
     opacity: 0;
-    transform: translateX(28px);
+    transform: translateX(var(--cover-slide-distance, 28px));
   }
 
   to {
@@ -141,7 +145,7 @@ input {
 
   to {
     opacity: 0;
-    transform: translateX(-28px);
+    transform: translateX(var(--cover-slide-distance-negative, -28px));
   }
 }
 
@@ -166,7 +170,7 @@ input {
    * ジャケットの後ろへ少し潜り込ませる。
    * ウィンドウを大きくしても自動追従する。
    */
-  left: calc(100vh - 10px);
+  left: calc(100vh - var(--background-underlap, 44px));
 
   z-index: 0;
 
@@ -224,7 +228,7 @@ input {
   top: 8%;
   right: 0;
   bottom: 8%;
-  left: calc(100vh - 10px);
+  left: calc(100vh - var(--background-underlap, 44px));
 
   z-index: 1;
 
