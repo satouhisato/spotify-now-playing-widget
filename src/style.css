@@ -2,12 +2,6 @@
   box-sizing: border-box;
 }
 
-@property --wipe-progress {
-  syntax: "<percentage>";
-  inherits: false;
-  initial-value: 0%;
-}
-
 html,
 body,
 #root {
@@ -43,9 +37,7 @@ input {
   height: 100%;
 
   --background-underlap: 10px;
-  --track-wipe-easing: cubic-bezier(0.42, 0, 0.58, 1);
-  --track-wipe-feather: 20px;
-  --track-wipe-offset: 6px;
+  --track-text-easing: cubic-bezier(0.45, 0, 0.55, 1);
 
   overflow: hidden;
 
@@ -56,8 +48,8 @@ input {
 }
 
 /*
- * 曲変更時は古い表示を残し、新しい各要素を同じ割合でワイプ表示する。
- * 半透明では重ねず、各位置を常にどちらか一方の曲だけで描画する。
+ * 曲変更時も画像は動かさず、ジャケットと背景を同じ曲へ一度に更新する。
+ * 新しい曲名とアーティスト名だけを小さく、ゆっくり進入させる。
  */
 .trackLayer {
   position: absolute;
@@ -69,57 +61,29 @@ input {
 
 .trackLayer.current,
 .trackLayer.entering {
-  z-index: 2;
-}
-
-.trackLayer.leaving {
   z-index: 1;
 }
 
-.trackLayer.entering .ambientCover,
-.trackLayer.entering .darkOverlay,
-.trackLayer.entering .cover,
 .trackLayer.entering .meta {
-  --wipe-progress: 0%;
-
-  mask-image: linear-gradient(
-    90deg,
-    #000 0,
-    #000 var(--wipe-progress),
-    transparent calc(var(--wipe-progress) + var(--track-wipe-feather, 20px)),
-    transparent 100%
-  );
-  mask-repeat: no-repeat;
-
-  -webkit-mask-image: linear-gradient(
-    90deg,
-    #000 0,
-    #000 var(--wipe-progress),
-    transparent calc(var(--wipe-progress) + var(--track-wipe-feather, 20px)),
-    transparent 100%
-  );
-  -webkit-mask-repeat: no-repeat;
-
   animation:
-    trackSoftWipeIn
+    trackMetaEnter
     var(--track-transition-duration, 1600ms)
-    var(--track-wipe-easing)
+    var(--track-text-easing)
     both;
 }
 
-.trackLayer.entering .ambientCover,
-.trackLayer.entering .darkOverlay {
-  left: 100vh;
-}
-
-@keyframes trackSoftWipeIn {
-  from {
-    --wipe-progress: 0%;
-    transform: translateX(var(--track-wipe-offset, 6px));
+@keyframes trackMetaEnter {
+  0% {
+    opacity: 0;
+    transform: translateX(8px);
   }
 
-  to {
-    --wipe-progress: 100%;
+  22% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 1;
     transform: translateX(0);
   }
 }
@@ -811,14 +775,7 @@ input {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .trackLayer.entering .ambientCover,
-  .trackLayer.entering .darkOverlay,
-  .trackLayer.leaving .ambientCover,
-  .trackLayer.leaving .darkOverlay,
-  .trackLayer.entering .cover,
-  .trackLayer.entering .meta,
-  .trackLayer.leaving .cover,
-  .trackLayer.leaving .meta {
+  .trackLayer.entering .meta {
     animation: none;
   }
 

@@ -33,7 +33,7 @@ type PollOutcome =
   | { kind: "success"; track: Track | null }
   | { kind: "error" };
 
-type TrackLayerPhase = "current" | "entering" | "leaving";
+type TrackLayerPhase = "current" | "entering";
 
 type DisplaySettings = {
   transitionMs: number;
@@ -100,7 +100,7 @@ function pollDelay(outcome: PollOutcome, consecutiveErrors: number) {
 export default function App() {
   const [track, setTrack] = useState<Track | null>(null);
   const [displayTrack, setDisplayTrack] = useState<Track | null>(null);
-  const [previousTrack, setPreviousTrack] = useState<Track | null>(null);
+  const [isTrackTransitioning, setIsTrackTransitioning] = useState(false);
   const [transitionNonce, setTransitionNonce] = useState(0);
   const [isWindowResizing, setIsWindowResizing] = useState(false);
   const [resizeNonce, setResizeNonce] = useState(0);
@@ -220,7 +220,7 @@ export default function App() {
       }
       displayTrackRef.current = null;
       setDisplayTrack(null);
-      setPreviousTrack(null);
+      setIsTrackTransitioning(false);
       return;
     }
 
@@ -250,12 +250,12 @@ export default function App() {
         window.clearTimeout(transitionTimerRef.current);
       }
 
-      setPreviousTrack(displayTrackRef.current);
       displayTrackRef.current = newestTrack;
       setDisplayTrack(newestTrack);
       setTransitionNonce((value) => value + 1);
+      setIsTrackTransitioning(true);
       transitionTimerRef.current = window.setTimeout(() => {
-        setPreviousTrack(null);
+        setIsTrackTransitioning(false);
         transitionTimerRef.current = null;
       }, displaySettingsRef.current.transitionMs);
     };
@@ -409,7 +409,7 @@ export default function App() {
     );
   }
 
-  const isTransitioning = previousTrack !== null;
+  const isTransitioning = isTrackTransitioning;
   const marqueePaused = isWindowResizing || isTransitioning;
 
   return (
@@ -421,15 +421,6 @@ export default function App() {
       onMouseDown={startMoving}
     >
       <ResizeHandles />
-
-      {previousTrack && (
-        <TrackLayer
-          key={`previous-${transitionNonce}`}
-          track={previousTrack}
-          phase="leaving"
-          marqueeRestartKey={`previous-${transitionNonce}`}
-        />
-      )}
 
       <TrackLayer
         key={`current-${displayTrack.track_key}-${transitionNonce}`}
@@ -487,7 +478,7 @@ function SettingsPanel({
       </header>
 
       <label className="settingRow">
-        <span>切り替え</span>
+        <span>文字の動き</span>
         <input
           type="range"
           min="400"
@@ -546,10 +537,7 @@ function TrackLayer({
   marqueeRestartKey: string;
 }) {
   return (
-    <div
-      className={`trackLayer ${phase}`}
-      aria-hidden={phase === "leaving"}
-    >
+    <div className={`trackLayer ${phase}`}>
       {track.image_url && (
         <div
           className="ambientCover"
