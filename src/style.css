@@ -67,22 +67,22 @@ input {
 
 .trackLayer.entering .ambientCover,
 .trackLayer.entering .darkOverlay {
-  animation: trackBackgroundIn 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: trackBackgroundIn 1600ms cubic-bezier(0.45, 0, 0.55, 1) both;
 }
 
 .trackLayer.leaving .ambientCover,
 .trackLayer.leaving .darkOverlay {
-  animation: trackBackgroundOut 800ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: trackBackgroundOut 1600ms cubic-bezier(0.45, 0, 0.55, 1) both;
 }
 
 .trackLayer.entering .cover,
 .trackLayer.entering .meta {
-  animation: trackContentIn 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: trackContentIn 1600ms cubic-bezier(0.45, 0, 0.55, 1) both;
 }
 
 .trackLayer.leaving .cover,
 .trackLayer.leaving .meta {
-  animation: trackContentOut 800ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: trackContentOut 1600ms cubic-bezier(0.45, 0, 0.55, 1) both;
 }
 
 @keyframes trackBackgroundIn {
@@ -108,7 +108,7 @@ input {
 @keyframes trackContentIn {
   from {
     opacity: 0;
-    transform: translateX(18px);
+    transform: translateX(28px);
   }
 
   to {
@@ -125,7 +125,7 @@ input {
 
   to {
     opacity: 0;
-    transform: translateX(-18px);
+    transform: translateX(-28px);
   }
 }
 
