@@ -67,7 +67,7 @@ function loadDisplaySettings(): DisplaySettings {
     const savedBlur = Number(saved.blurPx);
 
     return {
-      transitionMs: clamp(Number(saved.transitionMs) || 1600, 400, 3000),
+      transitionMs: clamp(Number(saved.transitionMs) || 1600, 400, 5000),
       blurPx: Number.isFinite(savedBlur) ? clamp(savedBlur, 0, 24) : 6,
       textScale: clamp(Number(saved.textScale) || 100, 80, 140),
     };
@@ -491,7 +491,7 @@ function SettingsPanel({
         <input
           type="range"
           min="400"
-          max="3000"
+          max="5000"
           step="100"
           value={settings.transitionMs}
           onChange={(event) =>
