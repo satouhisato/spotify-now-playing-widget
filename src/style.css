@@ -2,6 +2,12 @@
   box-sizing: border-box;
 }
 
+@property --wipe-progress {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
 html,
 body,
 #root {
@@ -38,6 +44,8 @@ input {
 
   --background-underlap: 10px;
   --track-wipe-easing: cubic-bezier(0.42, 0, 0.58, 1);
+  --track-wipe-feather: 20px;
+  --track-wipe-offset: 6px;
 
   overflow: hidden;
 
@@ -72,20 +80,47 @@ input {
 .trackLayer.entering .darkOverlay,
 .trackLayer.entering .cover,
 .trackLayer.entering .meta {
+  --wipe-progress: 0%;
+
+  mask-image: linear-gradient(
+    90deg,
+    #000 0,
+    #000 var(--wipe-progress),
+    transparent calc(var(--wipe-progress) + var(--track-wipe-feather, 20px)),
+    transparent 100%
+  );
+  mask-repeat: no-repeat;
+
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    #000 0,
+    #000 var(--wipe-progress),
+    transparent calc(var(--wipe-progress) + var(--track-wipe-feather, 20px)),
+    transparent 100%
+  );
+  -webkit-mask-repeat: no-repeat;
+
   animation:
-    trackWipeIn
+    trackSoftWipeIn
     var(--track-transition-duration, 1600ms)
     var(--track-wipe-easing)
     both;
 }
 
-@keyframes trackWipeIn {
+.trackLayer.entering .ambientCover,
+.trackLayer.entering .darkOverlay {
+  left: 100vh;
+}
+
+@keyframes trackSoftWipeIn {
   from {
-    clip-path: inset(0 100% 0 0);
+    --wipe-progress: 0%;
+    transform: translateX(var(--track-wipe-offset, 6px));
   }
 
   to {
-    clip-path: inset(0 0 0 0);
+    --wipe-progress: 100%;
+    transform: translateX(0);
   }
 }
 
