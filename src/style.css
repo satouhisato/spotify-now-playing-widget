@@ -38,7 +38,7 @@ input {
 
   --cover-slide-distance: 28px;
   --cover-slide-distance-negative: -28px;
-  --background-underlap: 44px;
+  --background-underlap: 10px;
 
   overflow: hidden;
 
@@ -108,20 +108,28 @@ input {
 @keyframes trackBackgroundIn {
   from {
     opacity: 0;
+    right: var(--cover-slide-distance, 28px);
+    transform: translateX(var(--cover-slide-distance, 28px));
   }
 
   to {
     opacity: 1;
+    right: 0;
+    transform: translateX(0);
   }
 }
 
 @keyframes trackBackgroundOut {
   from {
     opacity: 1;
+    right: 0;
+    transform: translateX(0);
   }
 
   to {
     opacity: 0;
+    right: var(--cover-slide-distance-negative, -28px);
+    transform: translateX(var(--cover-slide-distance-negative, -28px));
   }
 }
 
