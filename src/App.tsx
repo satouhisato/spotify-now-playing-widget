@@ -5,6 +5,7 @@ import React, {
   useState,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { LogicalSize } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 type ResizeDirection =
@@ -34,13 +35,46 @@ type PollOutcome =
 
 type TrackLayerPhase = "current" | "entering" | "leaving";
 
+type DisplaySettings = {
+  transitionMs: number;
+  blurPx: number;
+  textScale: number;
+};
+
 const ACTIVE_POLL_MS = 1000;
 const IDLE_POLL_MS = 3000;
-const TRACK_TRANSITION_MS = 1600;
 const RESIZE_SETTLE_MS = 180;
 const IMAGE_PRELOAD_TIMEOUT_MS = 800;
+const SETTINGS_STORAGE_KEY = "spotify_widget_display_settings";
+const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
+  transitionMs: 1600,
+  blurPx: 6,
+  textScale: 100,
+};
 
 const appWindow = getCurrentWindow();
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function loadDisplaySettings(): DisplaySettings {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(SETTINGS_STORAGE_KEY) || "{}"
+    ) as Partial<DisplaySettings>;
+
+    const savedBlur = Number(saved.blurPx);
+
+    return {
+      transitionMs: clamp(Number(saved.transitionMs) || 1600, 400, 3000),
+      blurPx: Number.isFinite(savedBlur) ? clamp(savedBlur, 0, 24) : 6,
+      textScale: clamp(Number(saved.textScale) || 100, 80, 140),
+    };
+  } catch {
+    return DEFAULT_DISPLAY_SETTINGS;
+  }
+}
 
 function pollDelay(outcome: PollOutcome, consecutiveErrors: number) {
   if (outcome.kind === "error") {
@@ -75,11 +109,26 @@ export default function App() {
   );
   const [status, setStatus] = useState("Spotifyに接続してください");
   const [busy, setBusy] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [displaySettings, setDisplaySettings] = useState(loadDisplaySettings);
 
   const displayTrackRef = useRef<Track | null>(null);
   const latestTrackRef = useRef<Track | null>(null);
   const transitionTimerRef = useRef<number | null>(null);
+  const displaySettingsRef = useRef(displaySettings);
+  const previousWindowSizeRef = useRef<{
+    width: number;
+    height: number;
+  } | null>(null);
   latestTrackRef.current = track;
+  displaySettingsRef.current = displaySettings;
+
+  useEffect(() => {
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify(displaySettings)
+    );
+  }, [displaySettings]);
 
   async function refresh(): Promise<PollOutcome> {
     try {
@@ -208,7 +257,7 @@ export default function App() {
       transitionTimerRef.current = window.setTimeout(() => {
         setPreviousTrack(null);
         transitionTimerRef.current = null;
-      }, TRACK_TRANSITION_MS);
+      }, displaySettingsRef.current.transitionMs);
     };
 
     if (track.image_url) {
@@ -278,6 +327,66 @@ export default function App() {
     }
   }
 
+  async function openSettings() {
+    setSettingsOpen(true);
+
+    try {
+      const [size, scaleFactor] = await Promise.all([
+        appWindow.innerSize(),
+        appWindow.scaleFactor(),
+      ]);
+      const logicalSize = {
+        width: size.width / scaleFactor,
+        height: size.height / scaleFactor,
+      };
+      previousWindowSizeRef.current = logicalSize;
+      await appWindow.setSize(
+        new LogicalSize(Math.max(340, logicalSize.width), 180)
+      );
+    } catch (error) {
+      console.error("設定画面用にウィンドウサイズを変更できませんでした", error);
+    }
+  }
+
+  async function closeSettings() {
+    setSettingsOpen(false);
+
+    const previousSize = previousWindowSizeRef.current;
+    previousWindowSizeRef.current = null;
+    if (!previousSize) return;
+
+    try {
+      await appWindow.setSize(
+        new LogicalSize(previousSize.width, previousSize.height)
+      );
+    } catch (error) {
+      console.error("元のウィンドウサイズへ戻せませんでした", error);
+    }
+  }
+
+  const displayStyle = {
+    "--track-transition-duration": `${displaySettings.transitionMs}ms`,
+    "--background-blur": `${displaySettings.blurPx}px`,
+    "--title-font-min": `${13 * (displaySettings.textScale / 100)}px`,
+    "--title-font-fluid": `${15 * (displaySettings.textScale / 100)}vh`,
+    "--title-font-max": `${24 * (displaySettings.textScale / 100)}px`,
+    "--artist-font-min": `${10 * (displaySettings.textScale / 100)}px`,
+    "--artist-font-fluid": `${11 * (displaySettings.textScale / 100)}vh`,
+    "--artist-font-max": `${17 * (displaySettings.textScale / 100)}px`,
+  } as React.CSSProperties;
+
+  if (settingsOpen) {
+    return (
+      <SettingsPanel
+        settings={displaySettings}
+        onChange={setDisplaySettings}
+        onReset={() => setDisplaySettings(DEFAULT_DISPLAY_SETTINGS)}
+        onClose={() => void closeSettings()}
+        onMouseDown={startMoving}
+      />
+    );
+  }
+
   if (!displayTrack) {
     return (
       <main className="shell login" onMouseDown={startMoving}>
@@ -308,6 +417,7 @@ export default function App() {
       className={`shell player ${
         displayTrack.is_playing ? "" : "paused"
       } ${marqueePaused ? "marqueePaused" : ""}`}
+      style={displayStyle}
       onMouseDown={startMoving}
     >
       <ResizeHandles />
@@ -329,12 +439,98 @@ export default function App() {
       />
 
       <button
+        className="settingsButton"
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={() => void openSettings()}
+        aria-label="表示設定"
+        title="表示設定"
+      >
+        ⚙
+      </button>
+
+      <button
         className="close"
         onMouseDown={(event) => event.stopPropagation()}
         onClick={() => appWindow.close()}
         aria-label="閉じる"
       >
         ×
+      </button>
+    </main>
+  );
+}
+
+function SettingsPanel({
+  settings,
+  onChange,
+  onReset,
+  onClose,
+  onMouseDown,
+}: {
+  settings: DisplaySettings;
+  onChange: (settings: DisplaySettings) => void;
+  onReset: () => void;
+  onClose: () => void;
+  onMouseDown: (event: React.MouseEvent<HTMLElement>) => void;
+}) {
+  const update = (change: Partial<DisplaySettings>) => {
+    onChange({ ...settings, ...change });
+  };
+
+  return (
+    <main className="shell settingsPanel" onMouseDown={onMouseDown}>
+      <header className="settingsHeader">
+        <strong>表示設定</strong>
+        <button className="settingsDone" onClick={onClose}>
+          完了
+        </button>
+      </header>
+
+      <label className="settingRow">
+        <span>スライド</span>
+        <input
+          type="range"
+          min="400"
+          max="3000"
+          step="100"
+          value={settings.transitionMs}
+          onChange={(event) =>
+            update({ transitionMs: Number(event.target.value) })
+          }
+        />
+        <output>{(settings.transitionMs / 1000).toFixed(1)}秒</output>
+      </label>
+
+      <label className="settingRow">
+        <span>背景ぼかし</span>
+        <input
+          type="range"
+          min="0"
+          max="24"
+          step="1"
+          value={settings.blurPx}
+          onChange={(event) => update({ blurPx: Number(event.target.value) })}
+        />
+        <output>{settings.blurPx}px</output>
+      </label>
+
+      <label className="settingRow">
+        <span>文字サイズ</span>
+        <input
+          type="range"
+          min="80"
+          max="140"
+          step="5"
+          value={settings.textScale}
+          onChange={(event) =>
+            update({ textScale: Number(event.target.value) })
+          }
+        />
+        <output>{settings.textScale}%</output>
+      </label>
+
+      <button className="settingsReset" onClick={onReset}>
+        初期値に戻す
       </button>
     </main>
   );

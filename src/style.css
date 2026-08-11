@@ -67,22 +67,38 @@ input {
 
 .trackLayer.entering .ambientCover,
 .trackLayer.entering .darkOverlay {
-  animation: trackBackgroundIn 1600ms cubic-bezier(0.45, 0, 0.55, 1) both;
+  animation:
+    trackBackgroundIn
+    var(--track-transition-duration, 1600ms)
+    cubic-bezier(0.45, 0, 0.55, 1)
+    both;
 }
 
 .trackLayer.leaving .ambientCover,
 .trackLayer.leaving .darkOverlay {
-  animation: trackBackgroundOut 1600ms cubic-bezier(0.45, 0, 0.55, 1) both;
+  animation:
+    trackBackgroundOut
+    var(--track-transition-duration, 1600ms)
+    cubic-bezier(0.45, 0, 0.55, 1)
+    both;
 }
 
 .trackLayer.entering .cover,
 .trackLayer.entering .meta {
-  animation: trackContentIn 1600ms cubic-bezier(0.45, 0, 0.55, 1) both;
+  animation:
+    trackContentIn
+    var(--track-transition-duration, 1600ms)
+    cubic-bezier(0.45, 0, 0.55, 1)
+    both;
 }
 
 .trackLayer.leaving .cover,
 .trackLayer.leaving .meta {
-  animation: trackContentOut 1600ms cubic-bezier(0.45, 0, 0.55, 1) both;
+  animation:
+    trackContentOut
+    var(--track-transition-duration, 1600ms)
+    cubic-bezier(0.45, 0, 0.55, 1)
+    both;
 }
 
 @keyframes trackBackgroundIn {
@@ -189,7 +205,7 @@ input {
    * 元のジャケットだと判別できる程度のぼかし。
    */
   filter:
-    blur(6px)
+    blur(var(--background-blur, 6px))
     saturate(1.05)
     brightness(0.92);
 
@@ -318,7 +334,11 @@ input {
   /*
    * ウィンドウの高さに応じて文字も追従。
    */
-  font-size: clamp(13px, 15vh, 24px);
+  font-size: clamp(
+    var(--title-font-min, 13px),
+    var(--title-font-fluid, 15vh),
+    var(--title-font-max, 24px)
+  );
   font-weight: 700;
   line-height: 1.18;
 
@@ -330,7 +350,11 @@ input {
 
   color: rgba(255, 255, 255, 0.72);
 
-  font-size: clamp(10px, 11vh, 17px);
+  font-size: clamp(
+    var(--artist-font-min, 10px),
+    var(--artist-font-fluid, 11vh),
+    var(--artist-font-max, 17px)
+  );
   font-weight: 400;
   line-height: 1.2;
 }
@@ -340,12 +364,12 @@ input {
   opacity: 0.8;
 }
 
-/* 閉じるボタン */
-.close {
+/* ホバー時の操作ボタン */
+.close,
+.settingsButton {
   position: absolute;
 
   top: 8%;
-  right: 4px;
 
   z-index: 30;
 
@@ -369,13 +393,107 @@ input {
   cursor: pointer;
 }
 
-.player:hover .close {
+.close {
+  right: 4px;
+}
+
+.settingsButton {
+  right: 26px;
+  font-size: 12px;
+}
+
+.player:hover .close,
+.player:hover .settingsButton {
   opacity: 1;
 }
 
-.close:hover {
+.close:hover,
+.settingsButton:hover {
   color: #ffffff;
   background: rgba(0, 0, 0, 0.65);
+}
+
+/* 表示設定 */
+.settingsPanel {
+  padding: 10px 12px 8px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+
+  background: rgba(16, 16, 16, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+}
+
+.settingsHeader {
+  min-height: 24px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  font-size: 13px;
+}
+
+.settingsHeader strong {
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.settingsDone,
+.settingsReset {
+  border: none;
+  cursor: pointer;
+}
+
+.settingsDone {
+  padding: 4px 10px;
+
+  color: #06150a;
+  background: #1ed760;
+  border-radius: 5px;
+
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.settingRow {
+  min-height: 25px;
+
+  display: grid;
+  grid-template-columns: 78px minmax(80px, 1fr) 45px;
+  align-items: center;
+  gap: 8px;
+
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+}
+
+.settingRow input[type="range"] {
+  width: 100%;
+  margin: 0;
+  accent-color: #1ed760;
+  cursor: pointer;
+}
+
+.settingRow output {
+  color: rgba(255, 255, 255, 0.58);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.settingsReset {
+  align-self: flex-start;
+  padding: 2px 0;
+
+  color: rgba(255, 255, 255, 0.5);
+  background: transparent;
+
+  font-size: 10px;
+}
+
+.settingsReset:hover {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 /*
