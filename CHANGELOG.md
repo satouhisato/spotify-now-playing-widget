@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Documentation
+
+- READMEを利用者向け情報から開発・トラブル対応まで追いやすい構成へ再整理。
+
 ## [0.3.1] - 2026-08-12
 
 ### Changed
