@@ -13,7 +13,7 @@ Spotify data comes from the Spotify Web API. Authentication uses Authorization C
 - Keep the window draggable from non-interactive areas.
 - Preserve the existing cover-art-led visual identity unless the user explicitly asks for a redesign.
 - Keep long titles and artist names readable with the existing marquee behavior.
-- Keep track changes subtle: preload artwork, replace the cover and background together without moving them, then animate only the new title and artist with a small, slow entrance.
+- Keep track changes subtle: preload artwork, replace all content together without retaining the old layer, then animate the complete new player with a small focus zoom and brief fade.
 - Do not add playback controls or other permanent UI without an explicit request.
 - Do not remove or expose the Spotify PKCE state check, access token, or refresh token.
 

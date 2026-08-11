@@ -478,7 +478,7 @@ function SettingsPanel({
       </header>
 
       <label className="settingRow">
-        <span>文字の動き</span>
+        <span>全体の動き</span>
         <input
           type="range"
           min="400"

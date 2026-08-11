@@ -37,7 +37,7 @@ input {
   height: 100%;
 
   --background-underlap: 10px;
-  --track-text-easing: cubic-bezier(0.45, 0, 0.55, 1);
+  --track-motion-easing: cubic-bezier(0.45, 0, 0.55, 1);
 
   overflow: hidden;
 
@@ -48,8 +48,8 @@ input {
 }
 
 /*
- * 曲変更時も画像は動かさず、ジャケットと背景を同じ曲へ一度に更新する。
- * 新しい曲名とアーティスト名だけを小さく、ゆっくり進入させる。
+ * 旧曲を残さず全要素を同じ曲へ一度に更新し、
+ * 新しい表示全体を一枚として小さく、ゆっくり拡大する。
  */
 .trackLayer {
   position: absolute;
@@ -57,6 +57,7 @@ input {
   overflow: hidden;
   pointer-events: none;
   isolation: isolate;
+  transform-origin: center;
 }
 
 .trackLayer.current,
@@ -64,18 +65,19 @@ input {
   z-index: 1;
 }
 
-.trackLayer.entering .meta {
+.trackLayer.entering {
   animation:
-    trackMetaEnter
+    trackFocusIn
     var(--track-transition-duration, 1600ms)
-    var(--track-text-easing)
+    var(--track-motion-easing)
     both;
+  will-change: transform, opacity;
 }
 
-@keyframes trackMetaEnter {
+@keyframes trackFocusIn {
   0% {
-    opacity: 0;
-    transform: translateX(8px);
+    opacity: 0.45;
+    transform: scale(0.975);
   }
 
   22% {
@@ -84,7 +86,7 @@ input {
 
   100% {
     opacity: 1;
-    transform: translateX(0);
+    transform: scale(1);
   }
 }
 
@@ -775,7 +777,7 @@ input {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .trackLayer.entering .meta {
+  .trackLayer.entering {
     animation: none;
   }
 
