@@ -43,7 +43,7 @@ type DisplaySettings = {
 
 const ACTIVE_POLL_MS = 400;
 const IDLE_POLL_MS = 1000;
-const TRACK_ENTRY_DELAY_MS = 220;
+const TRACK_ENTRY_DELAY_MS = 650;
 const RESIZE_SETTLE_MS = 180;
 const IMAGE_PRELOAD_TIMEOUT_MS = 800;
 const SETTINGS_STORAGE_KEY = "spotify_widget_display_settings";
