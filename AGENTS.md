@@ -20,7 +20,7 @@ Spotify data comes from the Spotify Web API. Authentication uses Authorization C
 ## Current behavior and known limitations
 
 - Playback information is polled about every second while playing and every three seconds while idle, with backoff after errors.
-- The width can vary from 288 px to 520 px and the height from 72 px to 180 px.
+- The width can vary from 180 px to 520 px and the height from 72 px to 180 px.
 - Marquee animation pauses during resize and track transitions, then restarts after remeasurement.
 - `spotify_url` is returned by Rust but is not currently used by the React UI.
 - When no track is returned, the same screen used for initial connection is displayed while polling continues.

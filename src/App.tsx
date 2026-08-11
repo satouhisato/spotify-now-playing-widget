@@ -36,7 +36,7 @@ type TrackLayerPhase = "current" | "entering" | "leaving";
 
 const ACTIVE_POLL_MS = 1000;
 const IDLE_POLL_MS = 3000;
-const TRACK_TRANSITION_MS = 260;
+const TRACK_TRANSITION_MS = 460;
 const RESIZE_SETTLE_MS = 180;
 const IMAGE_PRELOAD_TIMEOUT_MS = 800;
 
