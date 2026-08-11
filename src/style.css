@@ -40,6 +40,8 @@ input {
   --cover-slide-distance-negative: -28px;
   --background-underlap: 10px;
   --track-fade-duration: 280ms;
+  --track-slide-in-easing: cubic-bezier(0.16, 1, 0.3, 1);
+  --track-slide-out-easing: cubic-bezier(0.7, 0, 0.84, 0);
 
   overflow: hidden;
 
@@ -75,7 +77,7 @@ input {
   animation:
     trackBackgroundIn
     var(--track-transition-duration, 1600ms)
-    cubic-bezier(0.45, 0, 0.55, 1)
+    var(--track-slide-in-easing)
     both,
     trackFadeIn
     var(--track-fade-duration, 280ms)
@@ -88,7 +90,7 @@ input {
   animation:
     trackBackgroundOut
     var(--track-transition-duration, 1600ms)
-    cubic-bezier(0.45, 0, 0.55, 1)
+    var(--track-slide-out-easing)
     both,
     trackFadeOut
     var(--track-fade-duration, 280ms)
@@ -101,7 +103,7 @@ input {
   animation:
     trackContentIn
     var(--track-transition-duration, 1600ms)
-    cubic-bezier(0.45, 0, 0.55, 1)
+    var(--track-slide-in-easing)
     both,
     trackFadeIn
     var(--track-fade-duration, 280ms)
@@ -114,7 +116,7 @@ input {
   animation:
     trackContentOut
     var(--track-transition-duration, 1600ms)
-    cubic-bezier(0.45, 0, 0.55, 1)
+    var(--track-slide-out-easing)
     both,
     trackFadeOut
     var(--track-fade-duration, 280ms)
