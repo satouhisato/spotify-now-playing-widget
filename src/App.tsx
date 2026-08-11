@@ -487,7 +487,7 @@ function SettingsPanel({
       </header>
 
       <label className="settingRow">
-        <span>スライド</span>
+        <span>切り替え</span>
         <input
           type="range"
           min="400"

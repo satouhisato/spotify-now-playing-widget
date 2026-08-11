@@ -36,12 +36,8 @@ input {
   width: 100%;
   height: 100%;
 
-  --cover-slide-distance: 28px;
-  --cover-slide-distance-negative: -28px;
   --background-underlap: 10px;
-  --track-fade-duration: 280ms;
-  --track-slide-in-easing: cubic-bezier(0.42, 0, 0.58, 1);
-  --track-slide-out-easing: cubic-bezier(0.42, 0, 0.58, 1);
+  --track-wipe-easing: cubic-bezier(0.42, 0, 0.58, 1);
 
   overflow: hidden;
 
@@ -52,8 +48,8 @@ input {
 }
 
 /*
- * 曲変更時は古い表示と新しい表示を短時間だけ重ねる。
- * ウィンドウ自体は動かさず、中身だけをわずかに移動させる。
+ * 曲変更時は古い表示を残し、新しい各要素を同じ割合でワイプ表示する。
+ * 半透明では重ねず、各位置を常にどちらか一方の曲だけで描画する。
  */
 .trackLayer {
   position: absolute;
@@ -73,118 +69,23 @@ input {
 }
 
 .trackLayer.entering .ambientCover,
-.trackLayer.entering .darkOverlay {
-  animation:
-    trackBackgroundIn
-    var(--track-transition-duration, 1600ms)
-    var(--track-slide-in-easing)
-    both,
-    trackFadeIn
-    var(--track-fade-duration, 280ms)
-    ease-out
-    both;
-}
-
-.trackLayer.leaving .ambientCover,
-.trackLayer.leaving .darkOverlay {
-  animation:
-    trackBackgroundOut
-    var(--track-transition-duration, 1600ms)
-    var(--track-slide-out-easing)
-    both,
-    trackFadeOut
-    var(--track-fade-duration, 280ms)
-    ease-in
-    both;
-}
-
+.trackLayer.entering .darkOverlay,
 .trackLayer.entering .cover,
 .trackLayer.entering .meta {
   animation:
-    trackContentIn
+    trackWipeIn
     var(--track-transition-duration, 1600ms)
-    var(--track-slide-in-easing)
-    both,
-    trackFadeIn
-    var(--track-fade-duration, 280ms)
-    ease-out
+    var(--track-wipe-easing)
     both;
 }
 
-.trackLayer.leaving .cover,
-.trackLayer.leaving .meta {
-  animation:
-    trackContentOut
-    var(--track-transition-duration, 1600ms)
-    var(--track-slide-out-easing)
-    both,
-    trackFadeOut
-    var(--track-fade-duration, 280ms)
-    ease-in
-    both;
-}
-
-@keyframes trackBackgroundIn {
+@keyframes trackWipeIn {
   from {
-    right: var(--cover-slide-distance, 28px);
-    transform: translateX(var(--cover-slide-distance, 28px));
+    clip-path: inset(0 100% 0 0);
   }
 
   to {
-    right: 0;
-    transform: translateX(0);
-  }
-}
-
-@keyframes trackBackgroundOut {
-  from {
-    right: 0;
-    transform: translateX(0);
-  }
-
-  to {
-    right: var(--cover-slide-distance-negative, -28px);
-    transform: translateX(var(--cover-slide-distance-negative, -28px));
-  }
-}
-
-@keyframes trackFadeIn {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes trackFadeOut {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes trackContentIn {
-  from {
-    transform: translateX(var(--cover-slide-distance, 28px));
-  }
-
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes trackContentOut {
-  from {
-    transform: translateX(0);
-  }
-
-  to {
-    transform: translateX(var(--cover-slide-distance-negative, -28px));
+    clip-path: inset(0 0 0 0);
   }
 }
 
