@@ -1,0 +1,28 @@
+# JavaScript / Vite
+node_modules/
+dist/
+*.log
+npm-debug.log*
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Local environment and Spotify credentials
+.env
+.env.*
+!.env.example
+tokens.json
+**/tokens.json
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.bak
+*.swp

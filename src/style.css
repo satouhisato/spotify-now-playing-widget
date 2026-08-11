@@ -1,0 +1,620 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  color: #ffffff;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  user-select: none;
+}
+
+/*
+ * ウィンドウ全体は完全に透明。
+ * 外周の背景、枠線、角丸、影をすべてなくす。
+ */
+.player {
+  position: relative;
+  width: 100%;
+  height: 100%;
+
+  overflow: hidden;
+
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/*
+ * ぼかし幕の表示領域。
+ *
+ * 100vhはウィンドウの高さ。
+ * ジャケット幅も高さと同じなので、
+ * ジャケットの右端付近から幕を開始する。
+ *
+ * 上下5%ずつ短くするため、
+ * ジャケットのほうが常に幕より大きく見える。
+ */
+.ambientCover {
+  position: absolute;
+
+  top: 8%;
+  right: 0;
+  bottom: 8%;
+
+  /*
+   * ジャケットの後ろへ少し潜り込ませる。
+   * ウィンドウを大きくしても自動追従する。
+   */
+  left: calc(100vh - 10px);
+
+  z-index: 0;
+
+  overflow: hidden;
+
+  border: none;
+  border-radius: 7px;
+
+  background: none;
+
+  filter: none;
+  transform: none;
+  opacity: 1;
+
+  pointer-events: none;
+}
+
+/*
+ * ぼかす画像は幕の内側に配置する。
+ *
+ * 親要素のoverflow:hiddenにより、
+ * ぼかしが幕の外へ絶対に漏れない。
+ */
+.ambientCover::before {
+  content: "";
+
+  position: absolute;
+  inset: -12px;
+
+  background-image: inherit;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+
+  /*
+   * 元のジャケットだと判別できる程度のぼかし。
+   */
+  filter:
+    blur(6px)
+    saturate(1.05)
+    brightness(0.92);
+
+  transform: scale(1.04);
+}
+
+/*
+ * 暗色レイヤー。
+ *
+ * ambientCoverと完全に同じサイズにする。
+ * 枠線、影は一切付けない。
+ */
+.darkOverlay {
+  position: absolute;
+
+  top: 8%;
+  right: 0;
+  bottom: 8%;
+  left: calc(100vh - 10px);
+
+  z-index: 1;
+
+  background:
+    linear-gradient(
+      90deg,
+      rgba(5, 5, 5, 0.06) 0%,
+      rgba(5, 5, 5, 0.12) 30%,
+      rgba(5, 5, 5, 0.22) 65%,
+      rgba(5, 5, 5, 0.32) 100%
+    );
+
+  border: none;
+  border-radius: 7px;
+  box-shadow: none;
+
+  pointer-events: none;
+}
+
+/*
+ * 手前のジャケット。
+ *
+ * 幅・高さとも100vhにすることで、
+ * 常にウィンドウの高さと同じ正方形になる。
+ */
+.cover {
+  position: absolute;
+
+  top: 0;
+  left: 0;
+
+  z-index: 3;
+
+  width: 100vh;
+  height: 100vh;
+
+  object-fit: cover;
+
+  /*
+   * 元画像に近い丸み。
+   * ウィンドウを拡大したときも不自然にならないよう、
+   * 高さに応じて少しだけ変化させる。
+   */
+  border-radius: clamp(7px, 7vh, 13px);
+
+  border: none;
+
+  /*
+   * ジャケットの右側にだけ弱い影を落とし、
+   * 幕より手前にあるように見せる。
+   */
+  box-shadow:
+    3px 1px 10px rgba(0, 0, 0, 0.34);
+
+  pointer-events: none;
+}
+
+.cover.empty {
+  display: grid;
+  place-items: center;
+
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/*
+ * 曲情報。
+ *
+ * ジャケット幅100vhの右側から表示を開始する。
+ */
+.meta {
+  position: absolute;
+
+  top: 8%;
+  right: 0;
+  bottom: 8%;
+  left: 100vh;
+
+  z-index: 2;
+
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  padding:
+    0
+    clamp(14px, 4vw, 24px)
+    0
+    clamp(13px, 4vw, 22px);
+
+  pointer-events: none;
+}
+
+.title,
+.artist {
+  white-space: nowrap;
+
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.72);
+}
+
+.title {
+  color: rgba(255, 255, 255, 0.98);
+
+  /*
+   * ウィンドウの高さに応じて文字も追従。
+   */
+  font-size: clamp(13px, 15vh, 24px);
+  font-weight: 700;
+  line-height: 1.18;
+
+  letter-spacing: -0.01em;
+}
+
+.artist {
+  margin-top: clamp(5px, 6vh, 10px);
+
+  color: rgba(255, 255, 255, 0.72);
+
+  font-size: clamp(10px, 11vh, 17px);
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+/* 一時停止中 */
+.paused {
+  opacity: 0.8;
+}
+
+/* 閉じるボタン */
+.close {
+  position: absolute;
+
+  top: 8%;
+  right: 4px;
+
+  z-index: 30;
+
+  width: 18px;
+  height: 18px;
+  padding: 0;
+
+  display: grid;
+  place-items: center;
+
+  border: none;
+  border-radius: 3px;
+
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.75);
+
+  font-size: 14px;
+  line-height: 1;
+
+  opacity: 0;
+  cursor: pointer;
+}
+
+.player:hover .close {
+  opacity: 1;
+}
+
+.close:hover {
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.65);
+}
+
+/*
+ * Spotify接続画面
+ */
+.login {
+  display: grid;
+  place-items: center;
+
+  padding: 14px;
+
+  background: rgba(12, 12, 12, 0.9);
+  border-radius: 7px;
+}
+
+.loginBox {
+  width: 100%;
+
+  display: grid;
+  gap: 8px;
+
+  text-align: center;
+}
+
+.loginBox span,
+.loginBox small {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+}
+
+.loginBox input,
+.loginBox button {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 3px;
+}
+
+.loginBox input {
+  color: #ffffff;
+
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.loginBox button {
+  color: #07160b;
+
+  background: #1ed760;
+  border: none;
+
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.loginBox button:disabled {
+  opacity: 0.5;
+}
+
+.dot {
+  color: #1ed760;
+  font-size: 20px;
+}
+
+/*
+ * リサイズ領域
+ */
+.resize {
+  position: absolute;
+  z-index: 50;
+}
+
+.n,
+.s {
+  left: 10px;
+  right: 10px;
+  height: 4px;
+}
+
+.n {
+  top: 0;
+  cursor: n-resize;
+}
+
+.s {
+  bottom: 0;
+  cursor: s-resize;
+}
+
+.e,
+.w {
+  top: 10px;
+  bottom: 10px;
+  width: 4px;
+}
+
+.e {
+  right: 0;
+  cursor: e-resize;
+}
+
+.w {
+  left: 0;
+  cursor: w-resize;
+}
+
+.ne,
+.nw,
+.se,
+.sw {
+  width: 10px;
+  height: 10px;
+}
+
+.ne {
+  top: 0;
+  right: 0;
+  cursor: ne-resize;
+}
+
+.nw {
+  top: 0;
+  left: 0;
+  cursor: nw-resize;
+}
+
+.se {
+  right: 0;
+  bottom: 0;
+  cursor: se-resize;
+}
+
+.sw {
+  left: 0;
+  bottom: 0;
+  cursor: sw-resize;
+}
+
+/*
+ * 曲名・アーティスト名の表示窓。
+ * はみ出した文字を幕の外へ出さない。
+ */
+.marqueeViewport {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+
+  /* 文字端をぼかさず、くっきり切り抜く */
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+.artistViewport {
+  margin-top: clamp(5px, 6vh, 10px);
+}
+
+/*
+ * 通常時は文字幅に合わせる。
+ */
+.marqueeText {
+  display: flex;
+  align-items: center;
+
+  width: max-content;
+  min-width: 0;
+
+  white-space: nowrap;
+
+  transform: translateX(0);
+}
+
+/*
+ * artistViewport側で余白を付けるため、
+ * 元のartistのmargin-topは無効化する。
+ */
+.artist {
+  margin-top: 0;
+}
+
+/*
+ * 長い文字だけ、自動で左へ流す。
+ */
+.marqueeText.isScrolling {
+  animation:
+    marquee-scroll
+    var(--marquee-duration, 12s)
+    linear
+    infinite;
+}
+
+/*
+ * 曲名・アーティスト名を表示する窓。
+ * 長い文字はこの範囲から外へ出さない。
+ */
+.marqueeViewport {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+
+  /*
+   * 左右の端を少しだけフェードさせる。
+   */
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 5px,
+    #000 calc(100% - 8px),
+    transparent 100%
+  );
+
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 5px,
+    #000 calc(100% - 8px),
+    transparent 100%
+  );
+}
+
+.titleViewport {
+  line-height: 1.2;
+}
+
+.artistViewport {
+  margin-top: clamp(5px, 6vh, 10px);
+  line-height: 1.2;
+}
+
+/*
+ * 文字を横一列に並べる。
+ */
+.marqueeTrack {
+  display: flex;
+  align-items: center;
+
+  width: max-content;
+
+  white-space: nowrap;
+  transform: translateX(0);
+}
+
+/*
+ * 表示領域を超えた場合だけ付与される。
+ */
+.marqueeTrack.isScrolling {
+  animation:
+    marqueeMove
+    var(--scroll-duration)
+    linear
+    infinite;
+}
+
+/*
+ * 曲名の複製との間隔。
+ */
+
+/*
+ * 最初に少し停止してから左へ流し、
+ * 末尾でも少し停止する。
+ */
+@keyframes marqueeMove {
+  0%,
+  10% {
+    transform: translateX(0);
+  }
+
+  90%,
+  100% {
+    transform:
+      translateX(
+        calc(-1 * var(--scroll-distance))
+      );
+  }
+}
+
+/*
+ * マウスを乗せたときもスクロールを続ける。
+ * 一時停止したい場合は、この設定をpauseへ変更可能。
+ */
+.player:hover .marqueeTrack.isScrolling {
+  animation-play-state: running;
+}
+
+/*
+ * Marquee内では、以前の省略表示を無効にする。
+ */
+.marqueeTrack .title,
+.marqueeTrack .artist {
+  flex: 0 0 auto;
+
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+/*
+ * アーティスト名の上余白はViewport側で付ける。
+ */
+.marqueeTrack .artist {
+  margin-top: 0;
+}
+
+/* 文字を完全にくっきり表示する */
+.marqueeViewport {
+  mask: none !important;
+  -webkit-mask: none !important;
+  mask-image: none !important;
+  -webkit-mask-image: none !important;
+}
+
+.title,
+.artist,
+.marqueeTrack .title,
+.marqueeTrack .artist {
+  text-shadow: none !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+}
+
+/* 文字レイヤー自体も透明度100%にする */
+.marqueeTrack,
+.marqueeTrack span {
+  opacity: 1 !important;
+}
+
+.marqueeSpace {
+  display: inline-block;
+  flex: 0 0 32px;
+}
