@@ -39,6 +39,7 @@ input {
   --cover-slide-distance: 28px;
   --cover-slide-distance-negative: -28px;
   --background-underlap: 10px;
+  --track-fade-duration: 280ms;
 
   overflow: hidden;
 
@@ -75,6 +76,10 @@ input {
     trackBackgroundIn
     var(--track-transition-duration, 1600ms)
     cubic-bezier(0.45, 0, 0.55, 1)
+    both,
+    trackFadeIn
+    var(--track-fade-duration, 280ms)
+    ease-out
     both;
 }
 
@@ -84,6 +89,10 @@ input {
     trackBackgroundOut
     var(--track-transition-duration, 1600ms)
     cubic-bezier(0.45, 0, 0.55, 1)
+    both,
+    trackFadeOut
+    var(--track-fade-duration, 280ms)
+    ease-in
     both;
 }
 
@@ -93,6 +102,10 @@ input {
     trackContentIn
     var(--track-transition-duration, 1600ms)
     cubic-bezier(0.45, 0, 0.55, 1)
+    both,
+    trackFadeIn
+    var(--track-fade-duration, 280ms)
+    ease-out
     both;
 }
 
@@ -102,18 +115,20 @@ input {
     trackContentOut
     var(--track-transition-duration, 1600ms)
     cubic-bezier(0.45, 0, 0.55, 1)
+    both,
+    trackFadeOut
+    var(--track-fade-duration, 280ms)
+    ease-in
     both;
 }
 
 @keyframes trackBackgroundIn {
   from {
-    opacity: 0;
     right: var(--cover-slide-distance, 28px);
     transform: translateX(var(--cover-slide-distance, 28px));
   }
 
   to {
-    opacity: 1;
     right: 0;
     transform: translateX(0);
   }
@@ -121,38 +136,52 @@ input {
 
 @keyframes trackBackgroundOut {
   from {
-    opacity: 1;
     right: 0;
     transform: translateX(0);
   }
 
   to {
-    opacity: 0;
     right: var(--cover-slide-distance-negative, -28px);
     transform: translateX(var(--cover-slide-distance-negative, -28px));
   }
 }
 
-@keyframes trackContentIn {
+@keyframes trackFadeIn {
   from {
     opacity: 0;
-    transform: translateX(var(--cover-slide-distance, 28px));
   }
 
   to {
     opacity: 1;
+  }
+}
+
+@keyframes trackFadeOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes trackContentIn {
+  from {
+    transform: translateX(var(--cover-slide-distance, 28px));
+  }
+
+  to {
     transform: translateX(0);
   }
 }
 
 @keyframes trackContentOut {
   from {
-    opacity: 1;
     transform: translateX(0);
   }
 
   to {
-    opacity: 0;
     transform: translateX(var(--cover-slide-distance-negative, -28px));
   }
 }
