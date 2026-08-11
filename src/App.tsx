@@ -43,7 +43,6 @@ type DisplaySettings = {
 
 const ACTIVE_POLL_MS = 400;
 const IDLE_POLL_MS = 1000;
-const TRACK_ENTRY_DELAY_MS = 650;
 const RESIZE_SETTLE_MS = 180;
 const IMAGE_PRELOAD_TIMEOUT_MS = 800;
 const SETTINGS_STORAGE_KEY = "spotify_widget_display_settings";
@@ -258,7 +257,7 @@ export default function App() {
       transitionTimerRef.current = window.setTimeout(() => {
         setPreviousTrack(null);
         transitionTimerRef.current = null;
-      }, TRACK_ENTRY_DELAY_MS + displaySettingsRef.current.transitionMs);
+      }, displaySettingsRef.current.transitionMs);
     };
 
     if (track.image_url) {
@@ -367,7 +366,6 @@ export default function App() {
 
   const displayStyle = {
     "--track-transition-duration": `${displaySettings.transitionMs}ms`,
-    "--track-entry-delay": `${TRACK_ENTRY_DELAY_MS}ms`,
     "--background-blur": `${displaySettings.blurPx}px`,
     "--title-font-min": `${13 * (displaySettings.textScale / 100)}px`,
     "--title-font-fluid": `${15 * (displaySettings.textScale / 100)}vh`,
