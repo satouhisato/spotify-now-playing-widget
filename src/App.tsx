@@ -33,10 +33,14 @@ type PollOutcome =
   | { kind: "success"; track: Track | null }
   | { kind: "error" };
 
-type TrackLayerPhase = "current" | "entering";
+type TrackLayerPhase = "current" | "entering" | "leaving";
+
+type TransitionMode = "focus" | "slide";
 
 type DisplaySettings = {
-  transitionMs: number;
+  transitionMode: TransitionMode;
+  focusTransitionMs: number;
+  slideTransitionMs: number;
   blurPx: number;
   textScale: number;
 };
@@ -47,7 +51,9 @@ const RESIZE_SETTLE_MS = 180;
 const IMAGE_PRELOAD_TIMEOUT_MS = 800;
 const SETTINGS_STORAGE_KEY = "spotify_widget_display_settings";
 const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
-  transitionMs: 1600,
+  transitionMode: "focus",
+  focusTransitionMs: 1600,
+  slideTransitionMs: 3000,
   blurPx: 6,
   textScale: 100,
 };
@@ -62,18 +68,38 @@ function loadDisplaySettings(): DisplaySettings {
   try {
     const saved = JSON.parse(
       localStorage.getItem(SETTINGS_STORAGE_KEY) || "{}"
-    ) as Partial<DisplaySettings>;
+    ) as Partial<DisplaySettings> & { transitionMs?: number };
 
     const savedBlur = Number(saved.blurPx);
+    const legacyTransitionMs = Number(saved.transitionMs);
 
     return {
-      transitionMs: clamp(Number(saved.transitionMs) || 1600, 400, 2000),
+      transitionMode: saved.transitionMode === "slide" ? "slide" : "focus",
+      focusTransitionMs: clamp(
+        Number(saved.focusTransitionMs) || legacyTransitionMs || 1600,
+        400,
+        2000
+      ),
+      slideTransitionMs: clamp(
+        Number(saved.slideTransitionMs) || 3000,
+        400,
+        5000
+      ),
       blurPx: Number.isFinite(savedBlur) ? clamp(savedBlur, 0, 24) : 6,
       textScale: clamp(Number(saved.textScale) || 100, 80, 140),
     };
   } catch {
     return DEFAULT_DISPLAY_SETTINGS;
   }
+}
+
+function transitionDuration(
+  settings: DisplaySettings,
+  mode: TransitionMode
+) {
+  return mode === "slide"
+    ? settings.slideTransitionMs
+    : settings.focusTransitionMs;
 }
 
 function pollDelay(outcome: PollOutcome, consecutiveErrors: number) {
@@ -100,7 +126,10 @@ function pollDelay(outcome: PollOutcome, consecutiveErrors: number) {
 export default function App() {
   const [track, setTrack] = useState<Track | null>(null);
   const [displayTrack, setDisplayTrack] = useState<Track | null>(null);
+  const [previousTrack, setPreviousTrack] = useState<Track | null>(null);
   const [isTrackTransitioning, setIsTrackTransitioning] = useState(false);
+  const [activeTransitionMode, setActiveTransitionMode] =
+    useState<TransitionMode>("focus");
   const [transitionNonce, setTransitionNonce] = useState(0);
   const [isWindowResizing, setIsWindowResizing] = useState(false);
   const [resizeNonce, setResizeNonce] = useState(0);
@@ -220,6 +249,7 @@ export default function App() {
       }
       displayTrackRef.current = null;
       setDisplayTrack(null);
+      setPreviousTrack(null);
       setIsTrackTransitioning(false);
       return;
     }
@@ -250,14 +280,26 @@ export default function App() {
         window.clearTimeout(transitionTimerRef.current);
       }
 
+      const nextSettings = displaySettingsRef.current;
+      const nextTransitionMode = nextSettings.transitionMode;
+      const nextTransitionDuration = transitionDuration(
+        nextSettings,
+        nextTransitionMode
+      );
+
+      setPreviousTrack(
+        nextTransitionMode === "slide" ? displayTrackRef.current : null
+      );
       displayTrackRef.current = newestTrack;
       setDisplayTrack(newestTrack);
       setTransitionNonce((value) => value + 1);
+      setActiveTransitionMode(nextTransitionMode);
       setIsTrackTransitioning(true);
       transitionTimerRef.current = window.setTimeout(() => {
+        setPreviousTrack(null);
         setIsTrackTransitioning(false);
         transitionTimerRef.current = null;
-      }, displaySettingsRef.current.transitionMs);
+      }, nextTransitionDuration);
     };
 
     if (track.image_url) {
@@ -365,7 +407,10 @@ export default function App() {
   }
 
   const displayStyle = {
-    "--track-transition-duration": `${displaySettings.transitionMs}ms`,
+    "--track-transition-duration": `${transitionDuration(
+      displaySettings,
+      activeTransitionMode
+    )}ms`,
     "--background-blur": `${displaySettings.blurPx}px`,
     "--title-font-min": `${13 * (displaySettings.textScale / 100)}px`,
     "--title-font-fluid": `${15 * (displaySettings.textScale / 100)}vh`,
@@ -416,11 +461,22 @@ export default function App() {
     <main
       className={`shell player ${
         displayTrack.is_playing ? "" : "paused"
-      } ${marqueePaused ? "marqueePaused" : ""}`}
+      } ${marqueePaused ? "marqueePaused" : ""} transition${
+        activeTransitionMode === "slide" ? "Slide" : "Focus"
+      }`}
       style={displayStyle}
       onMouseDown={startMoving}
     >
       <ResizeHandles />
+
+      {previousTrack && activeTransitionMode === "slide" && (
+        <TrackLayer
+          key={`previous-${transitionNonce}`}
+          track={previousTrack}
+          phase="leaving"
+          marqueeRestartKey={`previous-${transitionNonce}`}
+        />
+      )}
 
       <TrackLayer
         key={`current-${displayTrack.track_key}-${transitionNonce}`}
@@ -468,6 +524,13 @@ function SettingsPanel({
     onChange({ ...settings, ...change });
   };
 
+  const selectedTransitionMs = transitionDuration(
+    settings,
+    settings.transitionMode
+  );
+  const selectedTransitionMax =
+    settings.transitionMode === "slide" ? 5000 : 2000;
+
   return (
     <main className="shell settingsPanel" onMouseDown={onMouseDown}>
       <header className="settingsHeader">
@@ -477,19 +540,48 @@ function SettingsPanel({
         </button>
       </header>
 
+      <div className="settingRow modeRow">
+        <span>切り替え</span>
+        <div className="transitionModePicker">
+          <button
+            type="button"
+            className={settings.transitionMode === "focus" ? "active" : ""}
+            aria-pressed={settings.transitionMode === "focus"}
+            onClick={() => update({ transitionMode: "focus" })}
+          >
+            フォーカス
+          </button>
+          <button
+            type="button"
+            className={settings.transitionMode === "slide" ? "active" : ""}
+            aria-pressed={settings.transitionMode === "slide"}
+            onClick={() => update({ transitionMode: "slide" })}
+          >
+            スライド
+          </button>
+        </div>
+      </div>
+
       <label className="settingRow">
-        <span>全体の動き</span>
+        <span>
+          {settings.transitionMode === "slide" ? "スライド時間" : "ズーム時間"}
+        </span>
         <input
           type="range"
           min="400"
-          max="2000"
+          max={selectedTransitionMax}
           step="100"
-          value={settings.transitionMs}
-          onChange={(event) =>
-            update({ transitionMs: Number(event.target.value) })
-          }
+          value={selectedTransitionMs}
+          onChange={(event) => {
+            const durationMs = Number(event.target.value);
+            update(
+              settings.transitionMode === "slide"
+                ? { slideTransitionMs: durationMs }
+                : { focusTransitionMs: durationMs }
+            );
+          }}
         />
-        <output>{(settings.transitionMs / 1000).toFixed(1)}秒</output>
+        <output>{(selectedTransitionMs / 1000).toFixed(1)}秒</output>
       </label>
 
       <label className="settingRow">
@@ -537,7 +629,10 @@ function TrackLayer({
   marqueeRestartKey: string;
 }) {
   return (
-    <div className={`trackLayer ${phase}`}>
+    <div
+      className={`trackLayer ${phase}`}
+      aria-hidden={phase === "leaving"}
+    >
       {track.image_url && (
         <div
           className="ambientCover"

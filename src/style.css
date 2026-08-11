@@ -38,6 +38,11 @@ input {
 
   --background-underlap: 10px;
   --track-motion-easing: cubic-bezier(0.45, 0, 0.55, 1);
+  --cover-slide-distance: 28px;
+  --cover-slide-distance-negative: -28px;
+  --track-fade-duration: 280ms;
+  --track-slide-in-easing: cubic-bezier(0.42, 0, 0.58, 1);
+  --track-slide-out-easing: cubic-bezier(0.42, 0, 0.58, 1);
 
   overflow: hidden;
 
@@ -62,10 +67,14 @@ input {
 
 .trackLayer.current,
 .trackLayer.entering {
+  z-index: 2;
+}
+
+.trackLayer.leaving {
   z-index: 1;
 }
 
-.trackLayer.entering {
+.transitionFocus .trackLayer.entering {
   animation:
     trackFocusIn
     var(--track-transition-duration, 1600ms)
@@ -87,6 +96,122 @@ input {
   100% {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+.transitionSlide .trackLayer.entering .ambientCover,
+.transitionSlide .trackLayer.entering .darkOverlay {
+  animation:
+    trackBackgroundIn
+    var(--track-transition-duration, 3000ms)
+    var(--track-slide-in-easing)
+    both,
+    trackFadeIn
+    var(--track-fade-duration, 280ms)
+    ease-out
+    both;
+}
+
+.transitionSlide .trackLayer.leaving .ambientCover,
+.transitionSlide .trackLayer.leaving .darkOverlay {
+  animation:
+    trackBackgroundOut
+    var(--track-transition-duration, 3000ms)
+    var(--track-slide-out-easing)
+    both,
+    trackFadeOut
+    var(--track-fade-duration, 280ms)
+    ease-in
+    both;
+}
+
+.transitionSlide .trackLayer.entering .cover,
+.transitionSlide .trackLayer.entering .meta {
+  animation:
+    trackContentIn
+    var(--track-transition-duration, 3000ms)
+    var(--track-slide-in-easing)
+    both,
+    trackFadeIn
+    var(--track-fade-duration, 280ms)
+    ease-out
+    both;
+}
+
+.transitionSlide .trackLayer.leaving .cover,
+.transitionSlide .trackLayer.leaving .meta {
+  animation:
+    trackContentOut
+    var(--track-transition-duration, 3000ms)
+    var(--track-slide-out-easing)
+    both,
+    trackFadeOut
+    var(--track-fade-duration, 280ms)
+    ease-in
+    both;
+}
+
+@keyframes trackBackgroundIn {
+  from {
+    right: var(--cover-slide-distance, 28px);
+    transform: translateX(var(--cover-slide-distance, 28px));
+  }
+
+  to {
+    right: 0;
+    transform: translateX(0);
+  }
+}
+
+@keyframes trackBackgroundOut {
+  from {
+    right: 0;
+    transform: translateX(0);
+  }
+
+  to {
+    right: var(--cover-slide-distance-negative, -28px);
+    transform: translateX(var(--cover-slide-distance-negative, -28px));
+  }
+}
+
+@keyframes trackFadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes trackFadeOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes trackContentIn {
+  from {
+    transform: translateX(var(--cover-slide-distance, 28px));
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes trackContentOut {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(var(--cover-slide-distance-negative, -28px));
   }
 }
 
@@ -360,11 +485,11 @@ input {
 
 /* 表示設定 */
 .settingsPanel {
-  padding: 10px 12px 8px;
+  padding: 8px 12px 6px;
 
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 4px;
 
   background: rgba(16, 16, 16, 0.97);
   border: 1px solid rgba(255, 255, 255, 0.09);
@@ -372,7 +497,7 @@ input {
 }
 
 .settingsHeader {
-  min-height: 24px;
+  min-height: 22px;
 
   display: flex;
   align-items: center;
@@ -403,7 +528,7 @@ input {
 }
 
 .settingRow {
-  min-height: 25px;
+  min-height: 24px;
 
   display: grid;
   grid-template-columns: 78px minmax(80px, 1fr) 45px;
@@ -419,6 +544,34 @@ input {
   margin: 0;
   accent-color: #1ed760;
   cursor: pointer;
+}
+
+.transitionModePicker {
+  grid-column: 2 / 4;
+
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.transitionModePicker button {
+  height: 22px;
+  padding: 0 8px;
+
+  color: rgba(255, 255, 255, 0.66);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.transitionModePicker button.active {
+  color: #06150a;
+  background: #1ed760;
+  border-color: #1ed760;
+  font-weight: 700;
 }
 
 .settingRow output {
@@ -777,7 +930,15 @@ input {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .trackLayer.entering {
+  .transitionFocus .trackLayer.entering,
+  .transitionSlide .trackLayer.entering .ambientCover,
+  .transitionSlide .trackLayer.entering .darkOverlay,
+  .transitionSlide .trackLayer.leaving .ambientCover,
+  .transitionSlide .trackLayer.leaving .darkOverlay,
+  .transitionSlide .trackLayer.entering .cover,
+  .transitionSlide .trackLayer.entering .meta,
+  .transitionSlide .trackLayer.leaving .cover,
+  .transitionSlide .trackLayer.leaving .meta {
     animation: none;
   }
 

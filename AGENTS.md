@@ -13,7 +13,7 @@ Spotify data comes from the Spotify Web API. Authentication uses Authorization C
 - Keep the window draggable from non-interactive areas.
 - Preserve the existing cover-art-led visual identity unless the user explicitly asks for a redesign.
 - Keep long titles and artist names readable with the existing marquee behavior.
-- Keep track changes subtle: preload artwork, replace all content together without retaining the old layer, then animate the complete new player with a small focus zoom and brief fade.
+- Keep both selectable track transitions subtle: the default focus zoom replaces all content without retaining the old layer; the classic slide preserves the synchronized 0.3.10 movement and short crossfade.
 - Do not add playback controls or other permanent UI without an explicit request.
 - Do not remove or expose the Spotify PKCE state check, access token, or refresh token.
 
@@ -22,7 +22,7 @@ Spotify data comes from the Spotify Web API. Authentication uses Authorization C
 - Playback information is polled about every 400 ms while playing and every second while idle, with backoff after errors.
 - The width can vary from 180 px to 520 px and the height from 72 px to 180 px.
 - Marquee animation pauses during resize and track transitions, then restarts after remeasurement.
-- Hovering reveals a settings button for transition duration, background blur, and text scale; values persist in local storage.
+- Hovering reveals a settings button for transition mode, separate focus/slide durations, background blur, and text scale; values persist in local storage.
 - `spotify_url` is returned by Rust but is not currently used by the React UI.
 - When no track is returned, the same screen used for initial connection is displayed while polling continues.
 - Tokens are stored as JSON in the OS configuration directory under `spotify-now-playing-widget/tokens.json`.
