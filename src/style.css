@@ -40,8 +40,8 @@ input {
   --cover-slide-distance-negative: -28px;
   --background-underlap: 10px;
   --track-fade-duration: 280ms;
-  --track-slide-in-easing: cubic-bezier(0.16, 1, 0.3, 1);
-  --track-slide-out-easing: cubic-bezier(0.7, 0, 0.84, 0);
+  --track-slide-in-easing: cubic-bezier(0.42, 0, 0.58, 1);
+  --track-slide-out-easing: cubic-bezier(0.42, 0, 0.58, 1);
 
   overflow: hidden;
 
