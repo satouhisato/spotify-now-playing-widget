@@ -6,6 +6,7 @@ import React, {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { LogicalSize } from "@tauri-apps/api/dpi";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 type ResizeDirection =
@@ -29,10 +30,6 @@ type Track = {
   progress_ms: number | null;
 };
 
-type PollOutcome =
-  | { kind: "success"; track: Track | null }
-  | { kind: "error" };
-
 type TrackLayerPhase = "current" | "entering" | "leaving";
 
 type TransitionMode = "focus" | "slide";
@@ -45,8 +42,6 @@ type DisplaySettings = {
   textScale: number;
 };
 
-const ACTIVE_POLL_MS = 400;
-const IDLE_POLL_MS = 1000;
 const RESIZE_SETTLE_MS = 180;
 const IMAGE_PRELOAD_TIMEOUT_MS = 800;
 const SETTINGS_STORAGE_KEY = "spotify_widget_display_settings";
@@ -102,27 +97,6 @@ function transitionDuration(
     : settings.focusTransitionMs;
 }
 
-function pollDelay(outcome: PollOutcome, consecutiveErrors: number) {
-  if (outcome.kind === "error") {
-    return Math.min(15_000, 2000 * 2 ** Math.min(consecutiveErrors - 1, 3));
-  }
-
-  const currentTrack = outcome.track;
-  if (!currentTrack?.is_playing) return IDLE_POLL_MS;
-
-  if (
-    currentTrack.duration_ms !== null &&
-    currentTrack.progress_ms !== null
-  ) {
-    const remainingMs = currentTrack.duration_ms - currentTrack.progress_ms;
-    if (remainingMs > 0 && remainingMs < ACTIVE_POLL_MS) {
-      return Math.max(250, remainingMs + 120);
-    }
-  }
-
-  return ACTIVE_POLL_MS;
-}
-
 export default function App() {
   const [track, setTrack] = useState<Track | null>(null);
   const [displayTrack, setDisplayTrack] = useState<Track | null>(null);
@@ -133,11 +107,6 @@ export default function App() {
   const [transitionNonce, setTransitionNonce] = useState(0);
   const [isWindowResizing, setIsWindowResizing] = useState(false);
   const [resizeNonce, setResizeNonce] = useState(0);
-  const [clientId, setClientId] = useState(
-    localStorage.getItem("spotify_client_id") || ""
-  );
-  const [status, setStatus] = useState("Spotifyに接続してください");
-  const [busy, setBusy] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [displaySettings, setDisplaySettings] = useState(loadDisplaySettings);
 
@@ -159,50 +128,28 @@ export default function App() {
     );
   }, [displaySettings]);
 
-  async function refresh(): Promise<PollOutcome> {
-    try {
-      const currentTrack = await invoke<Track | null>("now_playing");
-      setTrack(currentTrack);
-      setStatus(currentTrack ? "" : "再生中の曲がありません");
-      return { kind: "success", track: currentTrack };
-    } catch (error) {
-      const notConnected = String(error).includes("not connected");
-      if (notConnected) setTrack(null);
-      setStatus(
-        notConnected
-          ? "Spotifyに接続してください"
-          : "曲情報を取得できませんでした"
-      );
-      return { kind: "error" };
-    }
-  }
-
   useEffect(() => {
     let disposed = false;
-    let timer: number | null = null;
-    let consecutiveErrors = 0;
+    let stopListening: (() => void) | undefined;
 
-    const poll = async () => {
-      const outcome = await refresh();
-      if (disposed) return;
-
-      if (outcome.kind === "error") {
-        consecutiveErrors += 1;
-      } else {
-        consecutiveErrors = 0;
-      }
-
-      timer = window.setTimeout(
-        poll,
-        pollDelay(outcome, consecutiveErrors)
+    const initialize = async () => {
+      stopListening = await listen<Track | null>(
+        "media-session-track",
+        (event) => {
+          if (!disposed) setTrack(event.payload);
+        }
       );
+      const currentTrack = await invoke<Track | null>("now_playing");
+      if (!disposed) setTrack(currentTrack);
     };
 
-    void poll();
+    void initialize().catch((error) => {
+      console.error("Windowsメディアセッションを開始できませんでした", error);
+    });
 
     return () => {
       disposed = true;
-      if (timer !== null) window.clearTimeout(timer);
+      stopListening?.();
     };
   }, []);
 
@@ -331,23 +278,6 @@ export default function App() {
     []
   );
 
-  async function login() {
-    const trimmedClientId = clientId.trim();
-    if (!trimmedClientId) return;
-
-    setBusy(true);
-    try {
-      localStorage.setItem("spotify_client_id", trimmedClientId);
-      await invoke("spotify_login", { clientId: trimmedClientId });
-      setStatus("接続しました");
-      await refresh();
-    } catch (error) {
-      setStatus(`接続エラー: ${String(error)}`);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function startMoving(event: React.MouseEvent<HTMLElement>) {
     if (event.button !== 0) return;
 
@@ -436,19 +366,12 @@ export default function App() {
     return (
       <main className="shell login" onMouseDown={startMoving}>
         <ResizeHandles />
+        <WindowButtons onOpenSettings={() => void openSettings()} />
         <div className="loginBox">
           <div className="dot">♫</div>
           <strong>Spotify Now Playing</strong>
-          <span>{status}</span>
-          <input
-            value={clientId}
-            onChange={(event) => setClientId(event.target.value)}
-            placeholder="Spotify Client ID"
-          />
-          <button onClick={login} disabled={busy || !clientId.trim()}>
-            {busy ? "ブラウザで認証中…" : "Spotifyに接続"}
-          </button>
-          <small>初回だけClient IDが必要です</small>
+          <span>Spotifyで曲を再生してください</span>
+          <small>Windowsの再生情報から自動で表示します</small>
         </div>
       </main>
     );
@@ -485,10 +408,18 @@ export default function App() {
         marqueeRestartKey={`${displayTrack.track_key}-${transitionNonce}-${resizeNonce}`}
       />
 
+      <WindowButtons onOpenSettings={() => void openSettings()} />
+    </main>
+  );
+}
+
+function WindowButtons({ onOpenSettings }: { onOpenSettings: () => void }) {
+  return (
+    <>
       <button
         className="settingsButton"
         onMouseDown={(event) => event.stopPropagation()}
-        onClick={() => void openSettings()}
+        onClick={onOpenSettings}
         aria-label="表示設定"
         title="表示設定"
       >
@@ -500,10 +431,11 @@ export default function App() {
         onMouseDown={(event) => event.stopPropagation()}
         onClick={() => appWindow.close()}
         aria-label="閉じる"
+        title="閉じる"
       >
         ×
       </button>
-    </main>
+    </>
   );
 }
 

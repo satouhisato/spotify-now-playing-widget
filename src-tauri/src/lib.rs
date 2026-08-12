@@ -1,21 +1,26 @@
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use rand::{distributions::Alphanumeric, Rng};
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-use std::{fs, path::PathBuf};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
+use base64::{engine::general_purpose::STANDARD, Engine};
+use serde::Serialize;
+use std::{
+    sync::{Arc, Mutex},
+    thread,
+    time::Duration,
 };
-const REDIRECT: &str = "http://127.0.0.1:43821/callback";
-#[derive(Serialize, Deserialize, Clone)]
-struct Tokens {
-    client_id: String,
-    access_token: String,
-    refresh_token: String,
-    expires_at: u64,
-}
-#[derive(Serialize)]
+use tauri::{AppHandle, Emitter, State};
+use windows::{
+    Media::Control::{
+        GlobalSystemMediaTransportControlsSession,
+        GlobalSystemMediaTransportControlsSessionManager,
+        GlobalSystemMediaTransportControlsSessionPlaybackStatus,
+    },
+    Storage::Streams::DataReader,
+    Win32::System::WinRT::{RoInitialize, RoUninitialize, RO_INIT_MULTITHREADED},
+};
+
+const MEDIA_SESSION_POLL_INTERVAL: Duration = Duration::from_millis(200);
+const MEDIA_SESSION_RETRY_INTERVAL: Duration = Duration::from_secs(2);
+const MAX_THUMBNAIL_BYTES: u64 = 8 * 1024 * 1024;
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 struct Track {
     track_key: String,
     title: String,
@@ -26,200 +31,249 @@ struct Track {
     duration_ms: Option<u64>,
     progress_ms: Option<u64>,
 }
-fn token_path() -> PathBuf {
-    let mut p = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
-    p.push("spotify-now-playing-widget");
-    let _ = fs::create_dir_all(&p);
-    p.push("tokens.json");
-    p
+
+#[derive(Clone, Default)]
+struct MediaSessionState {
+    current: Arc<Mutex<Option<Track>>>,
 }
-fn load() -> Result<Tokens, String> {
-    serde_json::from_str(&fs::read_to_string(token_path()).map_err(|_| "not connected")?)
-        .map_err(|e| e.to_string())
-}
-fn save(t: &Tokens) -> Result<(), String> {
-    fs::write(token_path(), serde_json::to_string(t).unwrap()).map_err(|e| e.to_string())
-}
-fn now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-}
-#[tauri::command]
-async fn spotify_login(client_id: String) -> Result<(), String> {
-    let verifier: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(64)
-        .map(char::from)
-        .collect();
-    let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-    let state: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(24)
-        .map(char::from)
-        .collect();
-    let auth=format!("https://accounts.spotify.com/authorize?client_id={}&response_type=code&redirect_uri={}&scope=user-read-currently-playing&code_challenge_method=S256&code_challenge={}&state={}",urlencoding::encode(&client_id),urlencoding::encode(REDIRECT),challenge,state);
-    let listener = TcpListener::bind("127.0.0.1:43821")
-        .await
-        .map_err(|e| format!("callback port: {e}"))?;
-    open::that(auth).map_err(|e| e.to_string())?;
-    let (mut socket, _) = listener.accept().await.map_err(|e| e.to_string())?;
-    let mut buf = [0u8; 4096];
-    let n = socket.read(&mut buf).await.map_err(|e| e.to_string())?;
-    let req = String::from_utf8_lossy(&buf[..n]);
-    let path = req.split_whitespace().nth(1).ok_or("invalid callback")?;
-    let url = url::Url::parse(&format!("http://127.0.0.1{path}")).map_err(|e| e.to_string())?;
-    let params: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
-    let ok = params.get("state") == Some(&state);
-    let code = params.get("code").cloned();
-    let body = if ok && code.is_some() {
-        "<h2>Connected. You can close this window.</h2>"
-    } else {
-        "<h2>Spotify connection failed.</h2>"
-    };
-    let response=format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body);
-    let _ = socket.write_all(response.as_bytes()).await;
-    if !ok {
-        return Err("state mismatch".into());
+
+fn spotify_session(
+    manager: &GlobalSystemMediaTransportControlsSessionManager,
+) -> windows::core::Result<Option<GlobalSystemMediaTransportControlsSession>> {
+    let sessions = manager.GetSessions()?;
+    for index in 0..sessions.Size()? {
+        let session = sessions.GetAt(index)?;
+        let source = session.SourceAppUserModelId()?.to_string().to_lowercase();
+        if source.contains("spotify") {
+            return Ok(Some(session));
+        }
     }
-    let form = [
-        ("client_id", client_id.as_str()),
-        ("grant_type", "authorization_code"),
-        ("code", code.as_deref().unwrap()),
-        ("redirect_uri", REDIRECT),
-        ("code_verifier", verifier.as_str()),
-    ];
-    let v: reqwest::Response = reqwest::Client::new()
-        .post("https://accounts.spotify.com/api/token")
-        .form(&form)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    let j: serde_json::Value = v.json().await.map_err(|e| e.to_string())?;
-    let t = Tokens {
-        client_id,
-        access_token: j["access_token"]
-            .as_str()
-            .ok_or_else(|| j.to_string())?
-            .into(),
-        refresh_token: j["refresh_token"]
-            .as_str()
-            .ok_or("missing refresh token")?
-            .into(),
-        expires_at: now() + j["expires_in"].as_u64().unwrap_or(3600) - 60,
-    };
-    save(&t)
+
+    Ok(None)
 }
-async fn valid_token() -> Result<Tokens, String> {
-    let mut t = load()?;
-    if now() < t.expires_at {
-        return Ok(t);
+
+fn ticks_to_ms(ticks: i64) -> Option<u64> {
+    u64::try_from(ticks).ok().map(|value| value / 10_000)
+}
+
+fn thumbnail_data_url(
+    session_properties: &windows::Media::Control::GlobalSystemMediaTransportControlsSessionMediaProperties,
+) -> Option<String> {
+    let reference = session_properties.Thumbnail().ok()?;
+    let stream = reference.OpenReadAsync().ok()?.get().ok()?;
+    let size = stream.Size().ok()?.min(MAX_THUMBNAIL_BYTES);
+    if size == 0 {
+        return None;
     }
-    let form = [
-        ("client_id", t.client_id.as_str()),
-        ("grant_type", "refresh_token"),
-        ("refresh_token", t.refresh_token.as_str()),
-    ];
-    let j: serde_json::Value = reqwest::Client::new()
-        .post("https://accounts.spotify.com/api/token")
-        .form(&form)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .json()
-        .await
-        .map_err(|e| e.to_string())?;
-    t.access_token = j["access_token"]
-        .as_str()
-        .ok_or_else(|| j.to_string())?
-        .into();
-    t.expires_at = now() + j["expires_in"].as_u64().unwrap_or(3600) - 60;
-    save(&t)?;
-    Ok(t)
+
+    let input = stream.GetInputStreamAt(0).ok()?;
+    let reader = DataReader::CreateDataReader(&input).ok()?;
+    let loaded = reader.LoadAsync(size as u32).ok()?.get().ok()?;
+    let mut bytes = vec![0; loaded as usize];
+    reader.ReadBytes(&mut bytes).ok()?;
+    let content_type = stream
+        .ContentType()
+        .ok()
+        .map(|value| value.to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "image/jpeg".to_string());
+    let _ = reader.Close();
+
+    Some(format!(
+        "data:{content_type};base64,{}",
+        STANDARD.encode(bytes)
+    ))
 }
-#[tauri::command]
-async fn now_playing() -> Result<Option<Track>, String> {
-    let t = valid_token().await?;
-    let r = reqwest::Client::new()
-        .get("https://api.spotify.com/v1/me/player/currently-playing")
-        .bearer_auth(t.access_token)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    if r.status().as_u16() == 204 {
+
+fn read_track(
+    manager: &GlobalSystemMediaTransportControlsSessionManager,
+    previous: Option<&Track>,
+) -> windows::core::Result<Option<Track>> {
+    let Some(session) = spotify_session(manager)? else {
+        return Ok(None);
+    };
+
+    let properties = session.TryGetMediaPropertiesAsync()?.get()?;
+    let title = properties.Title()?.to_string();
+    if title.trim().is_empty() {
         return Ok(None);
     }
-    if !r.status().is_success() {
-        return Err(format!("Spotify API: {}", r.status()));
-    }
-    let j: serde_json::Value = r.json().await.map_err(|e| e.to_string())?;
-    let item = &j["item"];
-    let artists = item["artists"]
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|x| x["name"].as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        })
-        .unwrap_or_default();
-    let title = item["name"].as_str().unwrap_or("Unknown").to_string();
-    let spotify_url = item["external_urls"]["spotify"]
-        .as_str()
-        .map(str::to_string);
-    let track_key = item["uri"]
-        .as_str()
-        .or(spotify_url.as_deref())
-        .map(str::to_string)
-        .unwrap_or_else(|| format!("{title}\u{1f}{artists}"));
-    let image_url = item["album"]["images"]
-        .as_array()
-        .and_then(|a| a.first())
-        .and_then(|x| x["url"].as_str())
-        .or_else(|| {
-            item["images"]
-                .as_array()
-                .and_then(|a| a.first())
-                .and_then(|x| x["url"].as_str())
-        })
-        .map(str::to_string);
+
+    let artists = properties.Artist()?.to_string();
+    let album = properties.AlbumTitle()?.to_string();
+    let source = session.SourceAppUserModelId()?.to_string();
+    let track_key = format!("{source}\u{1f}{title}\u{1f}{artists}\u{1f}{album}");
+    let image_url = if previous
+        .filter(|track| track.track_key == track_key)
+        .and_then(|track| track.image_url.as_ref())
+        .is_some()
+    {
+        previous.and_then(|track| track.image_url.clone())
+    } else {
+        thumbnail_data_url(&properties)
+    };
+
+    let is_playing = session.GetPlaybackInfo()?.PlaybackStatus()?
+        == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+    let timeline = session.GetTimelineProperties().ok();
+    let progress_ms = timeline
+        .as_ref()
+        .and_then(|value| value.Position().ok())
+        .and_then(|value| ticks_to_ms(value.Duration));
+    let duration_ms = timeline.as_ref().and_then(|value| {
+        let start = value.StartTime().ok()?.Duration;
+        let end = value.EndTime().ok()?.Duration;
+        ticks_to_ms(end.saturating_sub(start))
+    });
 
     Ok(Some(Track {
         track_key,
         title,
         artists,
         image_url,
-        is_playing: j["is_playing"].as_bool().unwrap_or(false),
-        spotify_url,
-        duration_ms: item["duration_ms"].as_u64(),
-        progress_ms: j["progress_ms"].as_u64(),
+        is_playing,
+        spotify_url: None,
+        duration_ms,
+        progress_ms,
     }))
 }
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    tauri::Builder::default()
-        .setup(|app| {
-            #[cfg(desktop)]
+
+fn visible_track_changed(previous: Option<&Track>, next: Option<&Track>) -> bool {
+    match (previous, next) {
+        (None, None) => false,
+        (Some(previous), Some(next)) => {
+            previous.track_key != next.track_key
+                || previous.title != next.title
+                || previous.artists != next.artists
+                || previous.image_url != next.image_url
+                || previous.is_playing != next.is_playing
+        }
+        _ => true,
+    }
+}
+
+fn publish_track(app: &AppHandle, current: &Arc<Mutex<Option<Track>>>, track: Option<Track>) {
+    *current.lock().unwrap_or_else(|error| error.into_inner()) = track.clone();
+    let _ = app.emit("media-session-track", track);
+}
+
+struct WinRtApartment;
+
+impl WinRtApartment {
+    fn initialize() -> windows::core::Result<Self> {
+        unsafe { RoInitialize(RO_INIT_MULTITHREADED)? };
+        Ok(Self)
+    }
+}
+
+impl Drop for WinRtApartment {
+    fn drop(&mut self) {
+        unsafe { RoUninitialize() };
+    }
+}
+
+fn start_media_session_monitor(app: AppHandle, current: Arc<Mutex<Option<Track>>>) {
+    thread::spawn(move || {
+        let _apartment = match WinRtApartment::initialize() {
+            Ok(apartment) => apartment,
+            Err(error) => {
+                eprintln!("Windows Runtime initialization failed: {error}");
+                return;
+            }
+        };
+
+        loop {
+            let manager = match GlobalSystemMediaTransportControlsSessionManager::RequestAsync()
+                .and_then(|operation| operation.get())
             {
-                use tauri_plugin_autostart::MacosLauncher;
-                #[cfg(not(debug_assertions))]
-                use tauri_plugin_autostart::ManagerExt;
+                Ok(manager) => manager,
+                Err(error) => {
+                    eprintln!("Windows media session access failed: {error}");
+                    thread::sleep(MEDIA_SESSION_RETRY_INTERVAL);
+                    continue;
+                }
+            };
 
-                app.handle().plugin(tauri_plugin_autostart::init(
-                    MacosLauncher::LaunchAgent,
-                    None,
-                ))?;
-
-                #[cfg(not(debug_assertions))]
-                if let Err(error) = app.autolaunch().enable() {
-                    eprintln!("failed to enable autostart: {error}");
+            let mut previous: Option<Track> = None;
+            loop {
+                match read_track(&manager, previous.as_ref()) {
+                    Ok(next) => {
+                        if visible_track_changed(previous.as_ref(), next.as_ref()) {
+                            publish_track(&app, &current, next.clone());
+                        }
+                        previous = next;
+                        thread::sleep(MEDIA_SESSION_POLL_INTERVAL);
+                    }
+                    Err(error) => {
+                        eprintln!("Windows media session read failed: {error}");
+                        thread::sleep(MEDIA_SESSION_RETRY_INTERVAL);
+                        break;
+                    }
                 }
             }
+        }
+    });
+}
 
+#[tauri::command]
+fn now_playing(state: State<'_, MediaSessionState>) -> Option<Track> {
+    state
+        .current
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .clone()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn track(key: &str, is_playing: bool) -> Track {
+        Track {
+            track_key: key.to_string(),
+            title: "Title".to_string(),
+            artists: "Artist".to_string(),
+            image_url: Some("data:image/png;base64,abc".to_string()),
+            is_playing,
+            spotify_url: None,
+            duration_ms: Some(180_000),
+            progress_ms: Some(10_000),
+        }
+    }
+
+    #[test]
+    fn progress_only_change_does_not_repaint_the_widget() {
+        let previous = track("same", true);
+        let mut next = previous.clone();
+        next.progress_ms = Some(11_000);
+        assert!(!visible_track_changed(Some(&previous), Some(&next)));
+    }
+
+    #[test]
+    fn track_and_playback_changes_are_published() {
+        assert!(visible_track_changed(
+            Some(&track("first", true)),
+            Some(&track("second", true))
+        ));
+        assert!(visible_track_changed(
+            Some(&track("same", true)),
+            Some(&track("same", false))
+        ));
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let media_state = MediaSessionState::default();
+    let monitor_state = media_state.current.clone();
+
+    tauri::Builder::default()
+        .manage(media_state)
+        .setup(move |app| {
+            start_media_session_monitor(app.handle().clone(), monitor_state.clone());
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![spotify_login, now_playing])
+        .invoke_handler(tauri::generate_handler![now_playing])
         .run(tauri::generate_context!())
         .expect("error running app");
 }

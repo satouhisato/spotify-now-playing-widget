@@ -4,6 +4,36 @@
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-13
+
+### Changed
+
+- Spotify Web API、Client ID入力、OAuth認証、外部APIポーリングを通常動作から削除。
+- 曲情報の取得元を、権限付きMSIXから利用するWindows Global System Media Transport Controlsへ変更。
+- Spotifyのローカルメディアセッションを約200ms間隔で確認し、曲・ジャケット・再生状態の変更時だけReactへ通知する方式へ変更。
+- 配布形式を`globalMediaControl` capability付きの署名済みMSIXへ変更。
+- Windowsサインイン時の起動を、NSIS向けレジストリ登録からMSIXの`windows.startupTask`へ変更。
+
+### Fixed
+
+- Spotify APIの取得上限による長時間停止と、上限対策で手動スキップの反映が最長約1分遅れる問題を解消。
+- ブラウザなど別アプリのメディアセッションが存在しても、Spotifyのセッションを明示的に選択するよう修正。
+- バックグラウンド監視スレッドでWindows Runtimeを初期化し、メディアセッションAPIを確実に利用できるよう修正。
+
+## [0.6.2] - 2026-08-12
+
+### Fixed
+
+- 未接続、再生曲なし、Spotify取得上限中の画面にも、ホバー時の表示設定ボタンと終了ボタンを追加。
+
+## [0.6.1] - 2026-08-12
+
+### Fixed
+
+- Spotifyの開発モード用API上限に合わせ、再生位置から次回確認時刻を調整してリクエスト数を大幅に削減。
+- `429 Too Many Requests`の`Retry-After`を尊重し、指定時刻まで再試行を停止するよう修正。
+- 取得上限中も直前の曲表示を維持し、Spotify指定の再開予定時刻を小さく表示。
+
 ## [0.6.0] - 2026-08-12
 
 ### Added

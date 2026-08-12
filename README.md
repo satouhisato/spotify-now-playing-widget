@@ -1,50 +1,39 @@
 # Spotify Now Playing Widget
 
-Spotifyで再生中のジャケット、曲名、アーティスト名をデスクトップへ表示する、Windows向けのミニプレイヤーです。
-
-再生ボタンを並べるのではなく、音楽を聴いている間の見た目と邪魔にならない操作感に特化しています。Tauri 2、React、Rustで動作します。
+Spotifyで再生中のジャケット、曲名、アーティスト名をデスクトップへ表示するWindows向けウィジェットです。Tauri 2、React、Rustで動作します。
 
 ## 特徴
 
-- ジャケットと、同じ画像を使ったぼかし背景を一体表示
-- 曲変更を約0.4秒間隔で検知し、フォーカス・ズームまたは0.3.10仕様のスライドで切り替え
-- 幅180〜520px、高さ72〜180pxで自由にリサイズ
+- Windowsメディアセッションから曲情報を取得し、Spotify Web APIやClient IDを使用しない
+- 曲変更をローカルで約200ms間隔で検知
+- ジャケットとぼかし背景を一体表示
+- フォーカス・ズームと0.3.10仕様のスライドを選択可能
+- 幅180〜520px、高さ72〜180pxでリサイズ可能
 - 長い曲名とアーティスト名だけを自動スクロール
-- 常に最前面へ表示し、通常のタスクバーボタンは非表示
-- Windowsへのサインイン時に自動起動
-- インストール版ではPowerShellや開発用ターミナルの常駐が不要
-- アニメーション方式と方式別の秒数、背景ぼかし、文字サイズを設定画面から変更可能
+- 常に最前面、枠なし、タスクバー非表示、ドラッグ移動対応
+- 曲情報がない画面でも、ホバー時に設定ボタンと終了ボタンを表示
 
 ## 必要なもの
 
-- WindowsとWebView2
-- Spotifyアカウント
-- Spotify Developer Dashboardで作成したアプリのClient ID
+- Windows 10 version 1809以降またはWindows 11
+- WebView2
+- Windows版Spotifyアプリ
 
-Client Secretは使用しません。Spotifyへの接続にはAuthorization Code with PKCEを使用します。
+Spotify Developer Dashboardの設定、Client ID、OAuth認証は不要です。
 
-## Spotifyの準備
+## インストール
 
-1. [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)でアプリを作成します。
-2. アプリのRedirect URIへ次のURLを追加して保存します。
+配布用MSIXをインストールして、スタートメニューから`Spotify Now Playing Widget`を起動します。
 
-   ```text
-   http://127.0.0.1:43821/callback
-   ```
+開発用の自己署名MSIXでは、初回だけ同梱の公開証明書をWindowsの「信頼されたユーザー」へ登録する必要があります。秘密鍵は配布しません。
 
-   `localhost`ではなく、必ず`127.0.0.1`を使用してください。
+MSIXには次のWindows権限を宣言しています。
 
-3. Dashboardに表示されるClient IDをコピーします。
-4. ウィジェットの初回画面へClient IDを貼り付け、「Spotifyに接続」を押します。
-5. ブラウザでSpotifyへのアクセスを許可すると、再生情報の表示が始まります。
+```xml
+<uap7:Capability Name="globalMediaControl" />
+```
 
-Spotify Developer Dashboardの開発モードでは、使用するSpotifyアカウントをアプリの許可ユーザーへ追加する必要がある場合があります。
-
-## 通常利用
-
-配布用ビルドで生成されたセットアップEXEを実行し、スタートメニューから`Spotify Now Playing Widget`を起動します。
-
-インストール版は初回起動時にWindowsの自動起動へ登録されます。通常利用では、PowerShellやソースコードのフォルダを開いておく必要はありません。
+この権限により、SpotifyがWindowsへ公開している再生情報を読み取ります。Spotifyのパスワードやアクセストークンは扱いません。
 
 ## 操作
 
@@ -52,102 +41,69 @@ Spotify Developer Dashboardの開発モードでは、使用するSpotifyアカ�
 | --- | --- |
 | 空いている部分をドラッグ | ウィジェットを移動 |
 | 辺・四隅をドラッグ | 幅180〜520px、高さ72〜180pxでリサイズ |
-| マウスを置く | 表示設定ボタンと閉じるボタンを表示 |
+| マウスを置く | 設定ボタンと終了ボタンを表示 |
 | 歯車ボタン | 表示設定を開く |
 | ×ボタン | アプリを終了 |
 
-横幅変更中は文字スクロールが停止します。リサイズが終わると表示幅を再計測し、必要な文字だけ先頭からスクロールを再開します。
-
-## 表示設定
-
-設定値は変更と同時にPC内へ保存され、次回起動時にも引き継がれます。
-
-| 項目 | 範囲 | 初期値 |
-| --- | --- | --- |
-| アニメーション方式 | フォーカス／スライド | フォーカス |
-| フォーカス時間 | 0.4〜2.0秒 | 1.6秒 |
-| スライド時間 | 0.4〜5.0秒 | 3.0秒 |
-| 背景ぼかし | 0〜24px | 6px |
-| 文字サイズ | 80〜140% | 100% |
-
-「初期値に戻す」を押すと、上記の標準設定へ戻ります。設定画面を閉じると、ウィンドウは開く前のサイズへ戻ります。
-
-方式を切り替えると時間スライダーも選択中の方式へ切り替わります。フォーカスとスライドの秒数は別々に保存されます。
+設定画面では、切り替え方式、方式別の時間、背景ぼかし、文字サイズを変更できます。設定値はローカルストレージへ保存されます。
 
 ## 曲情報の更新
 
-- 再生中: 約0.4秒間隔
-- 一時停止中・再生曲なし: 約1秒間隔
-- 通信エラー時: 再試行間隔を自動的に延長
-
-新しいジャケットを先読みしてから表示を切り替えるため、画像の読み込み状況によっては検知後にわずかな待ち時間が加わります。
+- Spotifyのメディアセッションを約200ms間隔でローカル確認
+- 曲、ジャケット、再生／一時停止の変更時だけ画面へ通知
+- ブラウザなど他アプリのメディアセッションはSpotifyとして扱わない
+- インターネット経由の定期APIリクエストは行わない
 
 ## 開発
 
-### 開発環境
-
-- Node.js 20以上
-- Rust stable
-- Microsoft C++ Build Tools
-- WebView2
-
-TauriのWindows向け依存関係は[Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)も参照してください。
-
-### セットアップと開発起動
+### 通常確認
 
 ```powershell
-npm install
-npm run tauri dev
-```
-
-開発版の起動では、Windowsの自動起動設定を変更しません。
-
-### 確認
-
-```powershell
-npm run build
-cd src-tauri
+npm.cmd install
+npm.cmd run build
+Push-Location src-tauri
 cargo fmt -- --check
 cargo test --locked
+Pop-Location
 ```
 
-### 配布用ビルド
+### MSIX作成
 
 ```powershell
-npm run tauri build
+npm.cmd run build:msix
 ```
 
-Windows用セットアップEXEは次のフォルダへ生成されます。
+生成先：
 
 ```text
-src-tauri/target/release/bundle/nsis/
+src-tauri/target/release/bundle/msix/
+```
+
+初回インストールまたは更新には次のスクリプトを使用できます。
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-msix.ps1
 ```
 
 ## 保存されるデータ
 
-- SpotifyのClient IDと表示設定: WebViewのローカルストレージ
-- Spotifyのアクセストークンと更新トークン: OSの設定ディレクトリ内にある`spotify-now-playing-widget/tokens.json`
+- 表示設定：WebViewのローカルストレージ
+- 旧バージョンの`tokens.json`：0.7以降では読み込まないレガシーデータ
 
-認証トークンや個人用の設定ファイルをリポジトリへコミットしないでください。
+署名用の秘密鍵、トークン、`.env`をリポジトリへ追加しないでください。
 
 ## トラブルシューティング
 
-### Spotify認証後も接続できない
-
-- Redirect URIが`http://127.0.0.1:43821/callback`と完全に一致しているか確認してください。
-- Spotify Developer Dashboardで設定を保存したか確認してください。
-- 開発モードの場合は、使用中のSpotifyアカウントが許可ユーザーになっているか確認してください。
-
 ### 曲が表示されない
 
-- Spotifyで実際に曲が再生されているか確認してください。
-- 一度再生を開始し、最大数秒待ってください。
-- 継続する場合はアプリを終了し、スタートメニューから再起動してください。
+- Windows版Spotifyで実際に曲を再生してください。
+- Spotifyを再起動してからウィジェットを起動し直してください。
+- ソースから直接EXEを起動せず、権限付きMSIXとしてインストールした版を使用してください。
 
-### PowerShellの画面が残る
+### Windows起動時に表示されない
 
-`npm run tauri dev`などで起動した開発版ではなく、セットアップEXEからインストールした正式版をスタートメニューから起動してください。
+Windowsの「設定 > アプリ > スタートアップ」で`Spotify Now Playing Widget`を有効にしてください。
 
 ## 更新履歴
 
-バージョンごとの変更内容は[CHANGELOG.md](CHANGELOG.md)で確認できます。コード単位の詳細はGitHubのコミット履歴を参照してください。
+バージョンごとの変更内容は[CHANGELOG.md](CHANGELOG.md)を参照してください。

@@ -473,7 +473,9 @@ input {
 }
 
 .player:hover .close,
-.player:hover .settingsButton {
+.player:hover .settingsButton,
+.login:hover .close,
+.login:hover .settingsButton {
   opacity: 1;
 }
 
