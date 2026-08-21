@@ -25,7 +25,7 @@ Spotify Developer Dashboardの設定、Client ID、OAuth認証は不要です。
 
 配布用MSIXをインストールして、スタートメニューから`Spotify Now Playing Widget`を起動します。
 
-開発用の自己署名MSIXでは、初回だけ同梱の公開証明書をWindowsの「信頼されたユーザー」へ登録する必要があります。秘密鍵は配布しません。
+開発用の自己署名MSIXでは、初回だけ同梱の公開証明書を管理者権限でWindowsの「ローカル コンピューター > 信頼されたユーザー」へ登録する必要があります。「現在のユーザー」へ登録しただけでは、App Installerが署名を検証できません。秘密鍵は配布しません。
 
 MSIXには次のWindows権限を宣言しています。
 
