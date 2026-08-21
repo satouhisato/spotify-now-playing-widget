@@ -1,6 +1,13 @@
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+# Ensure the Cert: provider is available even when npm clears PSModulePath.
+$securityModule = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1"
+Import-Module -Name $securityModule
+if (-not (Get-PSDrive -Name Cert -ErrorAction SilentlyContinue)) {
+    throw "Windows certificate provider could not be loaded"
+}
+
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $packageJson = Get-Content -LiteralPath (Join-Path $projectRoot "package.json") -Raw -Encoding UTF8 | ConvertFrom-Json
 $version = [string]$packageJson.version

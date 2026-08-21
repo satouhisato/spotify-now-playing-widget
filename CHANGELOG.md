@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Windows標準PowerShellと証明書プロバイダーを明示的に使い、MSIXの署名処理が実行環境によって失敗しないよう修正。
+
 ## [0.7.2] - 2026-08-13
 
 ### Fixed
