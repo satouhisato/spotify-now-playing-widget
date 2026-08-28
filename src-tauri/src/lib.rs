@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::{
     sync::{Arc, Mutex},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::{AppHandle, Emitter, State};
 use windows::{
@@ -13,10 +13,15 @@ use windows::{
         GlobalSystemMediaTransportControlsSessionPlaybackStatus,
     },
     Storage::Streams::DataReader,
+    Win32::Graphics::DirectWrite::{
+        DWriteCreateFactory, IDWriteFactory, DWRITE_FACTORY_TYPE_SHARED,
+        DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT_NORMAL,
+    },
     Win32::System::WinRT::{RoInitialize, RoUninitialize, RO_INIT_MULTITHREADED},
 };
 
 const MEDIA_SESSION_POLL_INTERVAL: Duration = Duration::from_millis(200);
+const PROGRESS_PUBLISH_INTERVAL: Duration = Duration::from_secs(1);
 const MEDIA_SESSION_RETRY_INTERVAL: Duration = Duration::from_secs(2);
 const MAX_THUMBNAIL_BYTES: u64 = 8 * 1024 * 1024;
 
@@ -30,6 +35,31 @@ struct Track {
     spotify_url: Option<String>,
     duration_ms: Option<u64>,
     progress_ms: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct PlaybackProgress {
+    track_key: String,
+    duration_ms: Option<u64>,
+    progress_ms: Option<u64>,
+    is_playing: bool,
+}
+
+impl From<&Track> for PlaybackProgress {
+    fn from(track: &Track) -> Self {
+        Self {
+            track_key: track.track_key.clone(),
+            duration_ms: track.duration_ms,
+            progress_ms: track.progress_ms,
+            is_playing: track.is_playing,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct InstalledFontCatalog {
+    latin: Vec<String>,
+    japanese: Vec<String>,
 }
 
 #[derive(Clone, Default)]
@@ -152,11 +182,6 @@ fn visible_track_changed(previous: Option<&Track>, next: Option<&Track>) -> bool
     }
 }
 
-fn publish_track(app: &AppHandle, current: &Arc<Mutex<Option<Track>>>, track: Option<Track>) {
-    *current.lock().unwrap_or_else(|error| error.into_inner()) = track.clone();
-    let _ = app.emit("media-session-track", track);
-}
-
 struct WinRtApartment;
 
 impl WinRtApartment {
@@ -195,11 +220,26 @@ fn start_media_session_monitor(app: AppHandle, current: Arc<Mutex<Option<Track>>
             };
 
             let mut previous: Option<Track> = None;
+            let mut last_progress_publish = Instant::now()
+                .checked_sub(PROGRESS_PUBLISH_INTERVAL)
+                .unwrap();
             loop {
                 match read_track(&manager, previous.as_ref()) {
                     Ok(next) => {
-                        if visible_track_changed(previous.as_ref(), next.as_ref()) {
-                            publish_track(&app, &current, next.clone());
+                        let visible_changed =
+                            visible_track_changed(previous.as_ref(), next.as_ref());
+                        *current.lock().unwrap_or_else(|error| error.into_inner()) = next.clone();
+
+                        if visible_changed {
+                            let _ = app.emit("media-session-track", next.clone());
+                        }
+
+                        if visible_changed
+                            || last_progress_publish.elapsed() >= PROGRESS_PUBLISH_INTERVAL
+                        {
+                            let progress = next.as_ref().map(PlaybackProgress::from);
+                            let _ = app.emit("media-session-progress", progress);
+                            last_progress_publish = Instant::now();
                         }
                         previous = next;
                         thread::sleep(MEDIA_SESSION_POLL_INTERVAL);
@@ -222,6 +262,60 @@ fn now_playing(state: State<'_, MediaSessionState>) -> Option<Track> {
         .lock()
         .unwrap_or_else(|error| error.into_inner())
         .clone()
+}
+
+fn direct_write_font_catalog() -> windows::core::Result<InstalledFontCatalog> {
+    unsafe {
+        let factory: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
+        let mut collection = None;
+        factory.GetSystemFontCollection(&mut collection, false)?;
+        let collection = collection.expect("DirectWrite returned no system font collection");
+        let mut latin = Vec::new();
+        let mut japanese = Vec::new();
+
+        for index in 0..collection.GetFontFamilyCount() {
+            let family = collection.GetFontFamily(index)?;
+            let names = family.GetFamilyNames()?;
+            let name_length = names.GetStringLength(0)? as usize;
+            let mut buffer = vec![0u16; name_length + 1];
+            names.GetString(0, &mut buffer)?;
+            let name = String::from_utf16_lossy(&buffer[..name_length]);
+            if name.trim().is_empty() {
+                continue;
+            }
+
+            let matching = family.GetFirstMatchingFont(
+                DWRITE_FONT_WEIGHT_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL,
+                DWRITE_FONT_STYLE_NORMAL,
+            )?;
+            let supports_latin = matching.HasCharacter('A' as u32)?.as_bool()
+                && matching.HasCharacter('a' as u32)?.as_bool()
+                && matching.HasCharacter('0' as u32)?.as_bool();
+            let supports_japanese = matching.HasCharacter('あ' as u32)?.as_bool()
+                && matching.HasCharacter('ア' as u32)?.as_bool()
+                && matching.HasCharacter('日' as u32)?.as_bool();
+
+            if supports_japanese {
+                japanese.push(name.clone());
+            }
+            if supports_latin && !supports_japanese {
+                latin.push(name);
+            }
+        }
+
+        latin.sort_by_key(|name| name.to_lowercase());
+        latin.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
+        japanese.sort_by_key(|name| name.to_lowercase());
+        japanese.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
+
+        Ok(InstalledFontCatalog { latin, japanese })
+    }
+}
+
+#[tauri::command]
+fn installed_fonts() -> Result<InstalledFontCatalog, String> {
+    direct_write_font_catalog().map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
@@ -260,6 +354,17 @@ mod tests {
             Some(&track("same", false))
         ));
     }
+
+    #[test]
+    fn installed_font_catalog_contains_system_fonts() {
+        let catalog = direct_write_font_catalog().expect("system fonts should be enumerable");
+        assert!(!catalog.latin.is_empty());
+        assert!(!catalog.japanese.is_empty());
+        assert!(catalog.latin.iter().all(|latin_name| !catalog
+            .japanese
+            .iter()
+            .any(|japanese_name| latin_name.eq_ignore_ascii_case(japanese_name))));
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -273,7 +378,7 @@ pub fn run() {
             start_media_session_monitor(app.handle().clone(), monitor_state.clone());
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![now_playing])
+        .invoke_handler(tauri::generate_handler![now_playing, installed_fonts])
         .run(tauri::generate_context!())
         .expect("error running app");
 }
