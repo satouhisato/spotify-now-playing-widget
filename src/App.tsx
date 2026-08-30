@@ -71,6 +71,8 @@ type DisplaySettings = {
   fadeLength: number;
   fadeStrength: number;
   backgroundStyle: BackgroundStyle;
+  colorSaturation: number;
+  glassReflection: number;
   artistOpacity: number;
   textAlignment: TextAlignment;
   progressBarEnabled: boolean;
@@ -78,10 +80,31 @@ type DisplaySettings = {
   discSpinSeconds: number;
 };
 
+type PresetWindowSize = {
+  width: number;
+  height: number;
+};
+
+type CustomPreset = {
+  id: string;
+  name: string;
+  settings: DisplaySettings;
+  updatedAt: number;
+  windowSize?: PresetWindowSize;
+};
+
+type PresetExport = {
+  schemaVersion: 1;
+  exportedAt: string;
+  presets: CustomPreset[];
+};
+
 const RESIZE_SETTLE_MS = 180;
 const IMAGE_PRELOAD_TIMEOUT_MS = 800;
 const PROGRESS_SEEK_THRESHOLD_MS = 2_500;
 const SETTINGS_STORAGE_KEY = "spotify_widget_display_settings";
+const PRESETS_STORAGE_KEY = "spotify_widget_custom_presets";
+const MAX_CUSTOM_PRESETS = 12;
 const APP_FONT_SEGOE = "@app/segoe-ui";
 const APP_FONT_NOTO = "@app/noto-sans-jp";
 const APP_FONT_ZEN = "@app/zen-kaku-gothic-new";
@@ -100,6 +123,8 @@ const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   fadeLength: 30,
   fadeStrength: 70,
   backgroundStyle: "dark",
+  colorSaturation: 120,
+  glassReflection: 65,
   artistOpacity: 86,
   textAlignment: "left",
   progressBarEnabled: true,
@@ -113,81 +138,157 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+function normalizeDisplaySettings(value: unknown): DisplaySettings {
+  const saved = (value && typeof value === "object" ? value : {}) as Omit<
+    Partial<DisplaySettings>,
+    "coverShape"
+  > & {
+    transitionMs?: number;
+    fontStyle?: string;
+    coverShape?: string;
+  };
+
+  const savedBlur = Number(saved.blurPx);
+  const legacyTransitionMs = Number(saved.transitionMs);
+  const savedSpinSeconds = Number(saved.discSpinSeconds);
+  const savedFadeStrength = Number(
+    saved.fadeStrength ?? (saved as { fadeCurve?: number }).fadeCurve
+  );
+  const savedColorSaturation = Number(saved.colorSaturation);
+  const savedGlassReflection = Number(saved.glassReflection);
+
+  return {
+    transitionMode: saved.transitionMode === "slide" ? "slide" : "focus",
+    focusTransitionMs: clamp(
+      Number(saved.focusTransitionMs) || legacyTransitionMs || 1600,
+      400,
+      2000
+    ),
+    slideTransitionMs: clamp(
+      Number(saved.slideTransitionMs) || 3000,
+      400,
+      5000
+    ),
+    blurPx: Number.isFinite(savedBlur) ? clamp(savedBlur, 0, 24) : 6,
+    textScale: clamp(Number(saved.textScale) || 100, 50, 140),
+    latinFont:
+      typeof saved.latinFont === "string" &&
+      saved.latinFont !== APP_FONT_NOTO &&
+      saved.latinFont !== APP_FONT_ZEN
+        ? saved.latinFont
+        : APP_FONT_SEGOE,
+    japaneseFont:
+      typeof saved.japaneseFont === "string"
+        ? saved.japaneseFont
+        : saved.fontStyle === "zen" || saved.fontStyle === "rounded"
+          ? APP_FONT_ZEN
+          : APP_FONT_NOTO,
+    coverShape:
+      saved.coverShape === "square" ||
+      saved.coverShape === "circle" ||
+      saved.coverShape === "disc"
+        ? saved.coverShape
+        : saved.coverShape === "vinyl" || saved.coverShape === "cd"
+          ? "disc"
+          : "rounded",
+    bandThickness: clamp(Number(saved.bandThickness) || 84, 60, 100),
+    bandShape: saved.bandShape === "square" ? "square" : "rounded",
+    bandEdge: saved.bandEdge === "fade" ? "fade" : "solid",
+    fadeLength: clamp(Number(saved.fadeLength) || 30, 15, 60),
+    fadeStrength: Number.isFinite(savedFadeStrength)
+      ? clamp(savedFadeStrength, 40, 100)
+      : 70,
+    backgroundStyle:
+      saved.backgroundStyle === "vivid" ||
+      saved.backgroundStyle === "frost" ||
+      saved.backgroundStyle === "glass"
+        ? saved.backgroundStyle
+        : "dark",
+    colorSaturation: Number.isFinite(savedColorSaturation)
+      ? clamp(savedColorSaturation, 100, 160)
+      : 120,
+    glassReflection: Number.isFinite(savedGlassReflection)
+      ? clamp(savedGlassReflection, 0, 100)
+      : 65,
+    artistOpacity: clamp(Number(saved.artistOpacity) || 86, 50, 100),
+    textAlignment: saved.textAlignment === "center" ? "center" : "left",
+    progressBarEnabled: saved.progressBarEnabled !== false,
+    discSpinEnabled: saved.discSpinEnabled !== false,
+    discSpinSeconds: Number.isFinite(savedSpinSeconds)
+      ? clamp(savedSpinSeconds, 4, 30)
+      : 12,
+  };
+}
+
 function loadDisplaySettings(): DisplaySettings {
   try {
-    const saved = JSON.parse(
-      localStorage.getItem(SETTINGS_STORAGE_KEY) || "{}"
-    ) as Omit<Partial<DisplaySettings>, "coverShape"> & {
-      transitionMs?: number;
-      fontStyle?: string;
-      coverShape?: string;
-    };
-
-    const savedBlur = Number(saved.blurPx);
-    const legacyTransitionMs = Number(saved.transitionMs);
-    const savedSpinSeconds = Number(saved.discSpinSeconds);
-    const savedFadeStrength = Number(
-      saved.fadeStrength ?? (saved as { fadeCurve?: number }).fadeCurve
+    return normalizeDisplaySettings(
+      JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || "{}")
     );
-
-    return {
-      transitionMode: saved.transitionMode === "slide" ? "slide" : "focus",
-      focusTransitionMs: clamp(
-        Number(saved.focusTransitionMs) || legacyTransitionMs || 1600,
-        400,
-        2000
-      ),
-      slideTransitionMs: clamp(
-        Number(saved.slideTransitionMs) || 3000,
-        400,
-        5000
-      ),
-      blurPx: Number.isFinite(savedBlur) ? clamp(savedBlur, 0, 24) : 6,
-      textScale: clamp(Number(saved.textScale) || 100, 50, 140),
-      latinFont:
-        typeof saved.latinFont === "string" &&
-        saved.latinFont !== APP_FONT_NOTO &&
-        saved.latinFont !== APP_FONT_ZEN
-          ? saved.latinFont
-          : APP_FONT_SEGOE,
-      japaneseFont:
-        typeof saved.japaneseFont === "string"
-          ? saved.japaneseFont
-          : saved.fontStyle === "zen" || saved.fontStyle === "rounded"
-            ? APP_FONT_ZEN
-            : APP_FONT_NOTO,
-      coverShape:
-        saved.coverShape === "square" ||
-        saved.coverShape === "circle" ||
-        saved.coverShape === "disc"
-          ? saved.coverShape
-          : saved.coverShape === "vinyl" || saved.coverShape === "cd"
-            ? "disc"
-          : "rounded",
-      bandThickness: clamp(Number(saved.bandThickness) || 84, 60, 100),
-      bandShape: saved.bandShape === "square" ? "square" : "rounded",
-      bandEdge: saved.bandEdge === "fade" ? "fade" : "solid",
-      fadeLength: clamp(Number(saved.fadeLength) || 30, 15, 60),
-      fadeStrength: Number.isFinite(savedFadeStrength)
-        ? clamp(savedFadeStrength, 40, 100)
-        : 70,
-      backgroundStyle:
-        saved.backgroundStyle === "vivid" ||
-        saved.backgroundStyle === "frost" ||
-        saved.backgroundStyle === "glass"
-          ? saved.backgroundStyle
-          : "dark",
-      artistOpacity: clamp(Number(saved.artistOpacity) || 86, 50, 100),
-      textAlignment: saved.textAlignment === "center" ? "center" : "left",
-      progressBarEnabled: saved.progressBarEnabled !== false,
-      discSpinEnabled: saved.discSpinEnabled !== false,
-      discSpinSeconds: Number.isFinite(savedSpinSeconds)
-        ? clamp(savedSpinSeconds, 4, 30)
-        : 12,
-    };
   } catch {
     return DEFAULT_DISPLAY_SETTINGS;
   }
+}
+
+function normalizeWindowSize(value: unknown): PresetWindowSize | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const size = value as Partial<PresetWindowSize>;
+  const width = Number(size.width);
+  const height = Number(size.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return undefined;
+  return {
+    width: clamp(Math.round(width), 180, 520),
+    height: clamp(Math.round(height), 72, 180),
+  };
+}
+
+function normalizeCustomPresets(value: unknown): CustomPreset[] {
+  const source = Array.isArray(value)
+    ? value
+    : value &&
+        typeof value === "object" &&
+        Array.isArray((value as Partial<PresetExport>).presets)
+      ? (value as Partial<PresetExport>).presets ?? []
+      : [];
+
+  return source
+    .filter(
+      (preset): preset is Partial<CustomPreset> =>
+        Boolean(preset) &&
+        typeof preset === "object" &&
+        Boolean(preset.settings) &&
+        typeof preset.settings === "object"
+    )
+    .map((preset, index) => ({
+      id:
+        typeof preset.id === "string" && preset.id
+          ? preset.id
+          : `legacy-${index}`,
+      name:
+        typeof preset.name === "string" && preset.name.trim()
+          ? preset.name.trim().slice(0, 24)
+          : `プリセット ${index + 1}`,
+      settings: normalizeDisplaySettings(preset.settings),
+      updatedAt: Number(preset.updatedAt) || 0,
+      windowSize: normalizeWindowSize(preset.windowSize),
+    }))
+    .slice(0, MAX_CUSTOM_PRESETS);
+}
+
+function loadCustomPresets(): CustomPreset[] {
+  try {
+    return normalizeCustomPresets(
+      JSON.parse(localStorage.getItem(PRESETS_STORAGE_KEY) || "[]")
+    );
+  } catch {
+    return [];
+  }
+}
+
+function createPresetId() {
+  return typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `preset-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function cssFontFamily(font: string) {
@@ -220,6 +321,7 @@ export default function App() {
   const [resizeNonce, setResizeNonce] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [displaySettings, setDisplaySettings] = useState(loadDisplaySettings);
+  const [customPresets, setCustomPresets] = useState(loadCustomPresets);
   const [fontCatalog, setFontCatalog] = useState<InstalledFontCatalog>({
     latin: [],
     japanese: [],
@@ -242,6 +344,10 @@ export default function App() {
       JSON.stringify(displaySettings)
     );
   }, [displaySettings]);
+
+  useEffect(() => {
+    localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(customPresets));
+  }, [customPresets]);
 
   useEffect(() => {
     let disposed = false;
@@ -466,8 +572,32 @@ export default function App() {
     }
   }
 
+  async function presetWindowSize(
+    includeWindowSize: boolean
+  ): Promise<PresetWindowSize | undefined> {
+    if (!includeWindowSize) return undefined;
+    if (previousWindowSizeRef.current) {
+      return normalizeWindowSize(previousWindowSizeRef.current);
+    }
+
+    const [size, scaleFactor] = await Promise.all([
+      appWindow.innerSize(),
+      appWindow.scaleFactor(),
+    ]);
+    return normalizeWindowSize({
+      width: size.width / scaleFactor,
+      height: size.height / scaleFactor,
+    });
+  }
+
   const blurRatio = clamp(displaySettings.blurPx / 24, 0, 1);
   const detailFactor = 1 - blurRatio;
+  const colorStrength = clamp(
+    (displaySettings.colorSaturation - 100) / 60,
+    0,
+    1
+  );
+  const glassReflectionScale = displaySettings.glassReflection / 65;
   const displayStyle = {
     "--track-transition-duration": `${transitionDuration(
       displaySettings,
@@ -480,11 +610,17 @@ export default function App() {
     "--dark-overlay-mid": 0.12 + detailFactor * 0.06,
     "--dark-overlay-strong": 0.22 + detailFactor * 0.08,
     "--dark-overlay-end": 0.32 + detailFactor * 0.1,
-    "--vivid-saturation": 1.4 + blurRatio * 0.15,
-    "--vivid-contrast": 1.14 - blurRatio * 0.06,
-    "--vivid-overlay-start": 0.02 + detailFactor * 0.04,
-    "--vivid-overlay-mid": 0.08 + detailFactor * 0.07,
-    "--vivid-overlay-end": 0.2 + detailFactor * 0.1,
+    "--vivid-saturation":
+      1 + colorStrength * (0.45 + blurRatio * 0.1),
+    "--vivid-contrast":
+      1 + colorStrength * (0.14 - blurRatio * 0.06),
+    "--vivid-brightness": 1 + colorStrength * 0.04,
+    "--vivid-overlay-start":
+      0.01 + detailFactor * 0.02 + colorStrength * (0.01 + detailFactor * 0.02),
+    "--vivid-overlay-mid":
+      0.04 + detailFactor * 0.04 + colorStrength * (0.04 + detailFactor * 0.03),
+    "--vivid-overlay-end":
+      0.1 + detailFactor * 0.06 + colorStrength * (0.1 + detailFactor * 0.04),
     "--frost-saturation": 0.68 + blurRatio * 0.1,
     "--frost-brightness": 1.14 + blurRatio * 0.06,
     "--frost-overlay-start": 0.36 + detailFactor * 0.14,
@@ -495,7 +631,11 @@ export default function App() {
     "--glass-fill-alpha": 0.12 + detailFactor * 0.08,
     "--glass-soft-alpha": 0.066 + detailFactor * 0.044,
     "--glass-shade-alpha": 0.16 + detailFactor * 0.08,
-    "--glass-highlight-alpha": 0.36 + blurRatio * 0.12,
+    "--glass-highlight-alpha":
+      (0.36 + blurRatio * 0.12) * glassReflectionScale,
+    "--glass-diagonal-alpha": 0.14 * glassReflectionScale,
+    "--glass-surface-opacity": clamp(0.78 * glassReflectionScale, 0, 1),
+    "--glass-glint-opacity": clamp(0.66 * glassReflectionScale, 0, 1),
     "--title-font-min": `${13 * (displaySettings.textScale / 100)}px`,
     "--title-font-fluid": `${15 * (displaySettings.textScale / 100)}vh`,
     "--title-font-max": `${24 * (displaySettings.textScale / 100)}px`,
@@ -525,7 +665,62 @@ export default function App() {
       <SettingsPanel
         settings={displaySettings}
         fontCatalog={fontCatalog}
+        customPresets={customPresets}
         onChange={setDisplaySettings}
+        onCreatePreset={async (name, includeWindowSize) => {
+          const preset: CustomPreset = {
+            id: createPresetId(),
+            name,
+            settings: { ...displaySettings },
+            updatedAt: Date.now(),
+            windowSize: await presetWindowSize(includeWindowSize),
+          };
+          setCustomPresets((current) =>
+            [preset, ...current].slice(0, MAX_CUSTOM_PRESETS)
+          );
+          return preset.id;
+        }}
+        onUpdatePreset={async (id, name, includeWindowSize) => {
+          const windowSize = await presetWindowSize(includeWindowSize);
+          setCustomPresets((current) =>
+            current.map((preset) =>
+              preset.id === id
+                ? {
+                    ...preset,
+                    name,
+                    settings: { ...displaySettings },
+                    updatedAt: Date.now(),
+                    windowSize,
+                  }
+                : preset
+            )
+          );
+        }}
+        onApplyPreset={(preset) => {
+          setDisplaySettings({ ...preset.settings });
+          if (preset.windowSize) {
+            previousWindowSizeRef.current = { ...preset.windowSize };
+          }
+        }}
+        onDeletePreset={(id) => {
+          setCustomPresets((current) =>
+            current.filter((preset) => preset.id !== id)
+          );
+        }}
+        onImportPresets={(value) => {
+          const availableSlots = MAX_CUSTOM_PRESETS - customPresets.length;
+          const imported = normalizeCustomPresets(value)
+            .slice(0, availableSlots)
+            .map((preset) => ({
+              ...preset,
+              id: createPresetId(),
+              updatedAt: Date.now(),
+            }));
+          if (imported.length > 0) {
+            setCustomPresets((current) => [...current, ...imported]);
+          }
+          return imported.length;
+        }}
         onReset={() => setDisplaySettings(DEFAULT_DISPLAY_SETTINGS)}
         onClose={() => void closeSettings()}
         onMouseDown={startMoving}
@@ -578,6 +773,7 @@ export default function App() {
           progressBarEnabled={displaySettings.progressBarEnabled}
           backgroundStyle={displaySettings.backgroundStyle}
           blurPx={displaySettings.blurPx}
+          colorSaturation={displaySettings.colorSaturation}
         />
       )}
 
@@ -589,6 +785,7 @@ export default function App() {
         progressBarEnabled={displaySettings.progressBarEnabled}
         backgroundStyle={displaySettings.backgroundStyle}
         blurPx={displaySettings.blurPx}
+        colorSaturation={displaySettings.colorSaturation}
       />
 
       <WindowButtons onOpenSettings={() => void openSettings()} />
@@ -625,20 +822,133 @@ function WindowButtons({ onOpenSettings }: { onOpenSettings: () => void }) {
 function SettingsPanel({
   settings,
   fontCatalog,
+  customPresets,
   onChange,
+  onCreatePreset,
+  onUpdatePreset,
+  onApplyPreset,
+  onDeletePreset,
+  onImportPresets,
   onReset,
   onClose,
   onMouseDown,
 }: {
   settings: DisplaySettings;
   fontCatalog: InstalledFontCatalog;
+  customPresets: CustomPreset[];
   onChange: (settings: DisplaySettings) => void;
+  onCreatePreset: (name: string, includeWindowSize: boolean) => Promise<string>;
+  onUpdatePreset: (
+    id: string,
+    name: string,
+    includeWindowSize: boolean
+  ) => Promise<void>;
+  onApplyPreset: (preset: CustomPreset) => void;
+  onDeletePreset: (id: string) => void;
+  onImportPresets: (value: unknown) => number;
   onReset: () => void;
   onClose: () => void;
   onMouseDown: (event: React.MouseEvent<HTMLElement>) => void;
 }) {
+  const [selectedPresetId, setSelectedPresetId] = useState("");
+  const [appliedPresetId, setAppliedPresetId] = useState("");
+  const [presetName, setPresetName] = useState("");
+  const [includeWindowSize, setIncludeWindowSize] = useState(false);
+  const [presetMessage, setPresetMessage] = useState("");
+  const importInputRef = useRef<HTMLInputElement>(null);
+
   const update = (change: Partial<DisplaySettings>) => {
+    setPresetMessage("");
     onChange({ ...settings, ...change });
+  };
+
+  const selectedPreset = customPresets.find(
+    (preset) => preset.id === selectedPresetId
+  );
+  const normalizedPresetName = presetName.trim().slice(0, 24);
+  const presetSettingsMatch = Boolean(
+    selectedPreset &&
+      JSON.stringify(selectedPreset.settings) === JSON.stringify(settings)
+  );
+  const presetMetadataChanged = Boolean(
+    selectedPreset &&
+      (selectedPreset.name !== normalizedPresetName ||
+        Boolean(selectedPreset.windowSize) !== includeWindowSize)
+  );
+  const presetHasChanges = Boolean(
+    selectedPreset &&
+      (presetMetadataChanged ||
+        (appliedPresetId === selectedPreset.id && !presetSettingsMatch))
+  );
+  const presetStatus = presetHasChanges
+    ? "変更あり"
+    : presetSettingsMatch
+      ? "保存済み"
+      : "未適用";
+
+  const selectPreset = (id: string) => {
+    setSelectedPresetId(id);
+    const preset = customPresets.find((item) => item.id === id);
+    setPresetName(preset?.name ?? "");
+    setIncludeWindowSize(Boolean(preset?.windowSize));
+    setPresetMessage("");
+  };
+
+  const savePreset = async () => {
+    if (!normalizedPresetName) return;
+    if (selectedPreset) {
+      await onUpdatePreset(
+        selectedPreset.id,
+        normalizedPresetName,
+        includeWindowSize
+      );
+      setAppliedPresetId(selectedPreset.id);
+      setPresetMessage("上書きしました");
+      return;
+    }
+    if (customPresets.length >= MAX_CUSTOM_PRESETS) return;
+    const createdPresetId = await onCreatePreset(
+      normalizedPresetName,
+      includeWindowSize
+    );
+    setSelectedPresetId(createdPresetId);
+    setAppliedPresetId(createdPresetId);
+    setPresetName(normalizedPresetName);
+    setPresetMessage("保存しました");
+  };
+
+  const exportPresets = () => {
+    const payload: PresetExport = {
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      presets: customPresets,
+    };
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      })
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "spotify-widget-presets.json";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setPresetMessage(`${customPresets.length}件を書き出しました`);
+  };
+
+  const importPresets = async (file: File) => {
+    try {
+      const importedCount = onImportPresets(JSON.parse(await file.text()));
+      setPresetMessage(
+        importedCount > 0
+          ? `${importedCount}件を読み込みました`
+          : "読み込めるプリセットがありません"
+      );
+    } catch {
+      setPresetMessage("JSONファイルを読み込めませんでした");
+    }
   };
 
   const selectedTransitionMs = transitionDuration(
@@ -658,8 +968,153 @@ function SettingsPanel({
       </header>
 
       <div className="settingsScroll">
-        <section className="settingsSection">
-          <h2>スタイル</h2>
+        <SettingsSection title="カスタムプリセット" className="presetSection">
+          <div className="presetHeadingStatus" aria-live="polite">
+            {selectedPreset && (
+              <span
+                className={
+                  presetHasChanges
+                    ? "presetDirty"
+                    : presetSettingsMatch
+                      ? "presetSaved"
+                      : "presetPending"
+                }
+              >
+                {presetStatus}
+              </span>
+            )}
+            {presetMessage && <span>{presetMessage}</span>}
+          </div>
+
+          <div className="presetRow">
+            <select
+              aria-label="保存済みプリセット"
+              value={selectedPresetId}
+              onChange={(event) => selectPreset(event.target.value)}
+            >
+              <option value="">新しいプリセット</option>
+              {customPresets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="presetApply"
+              disabled={!selectedPreset}
+              onClick={() => {
+                if (!selectedPreset) return;
+                onApplyPreset(selectedPreset);
+                setAppliedPresetId(selectedPreset.id);
+                setIncludeWindowSize(Boolean(selectedPreset.windowSize));
+                setPresetMessage("適用しました");
+              }}
+            >
+              適用
+            </button>
+          </div>
+
+          <div className="presetRow">
+            <input
+              type="text"
+              value={presetName}
+              maxLength={24}
+              placeholder="プリセット名"
+              aria-label="プリセット名"
+              onChange={(event) => {
+                setPresetName(event.target.value);
+                setPresetMessage("");
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void savePreset();
+              }}
+            />
+            <button
+              className="presetSave"
+              disabled={
+                !normalizedPresetName ||
+                (!selectedPreset && customPresets.length >= MAX_CUSTOM_PRESETS)
+              }
+              onClick={() => void savePreset()}
+            >
+              {selectedPreset ? "上書き" : "保存"}
+            </button>
+          </div>
+
+          <label className="presetSizeOption">
+            <input
+              type="checkbox"
+              checked={includeWindowSize}
+              onChange={(event) => {
+                setIncludeWindowSize(event.target.checked);
+                setPresetMessage("");
+              }}
+            />
+            <span>ウィンドウサイズも含める</span>
+            {includeWindowSize && selectedPreset?.windowSize && (
+              <small>
+                {selectedPreset.windowSize.width}×
+                {selectedPreset.windowSize.height}
+              </small>
+            )}
+          </label>
+
+          <div className="presetActions">
+            <span>{customPresets.length}/{MAX_CUSTOM_PRESETS}</span>
+            <input
+              ref={importInputRef}
+              className="presetFileInput"
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void importPresets(file);
+              }}
+            />
+            <button
+              disabled={customPresets.length === 0}
+              onClick={exportPresets}
+            >
+              書き出し
+            </button>
+            <button
+              disabled={customPresets.length >= MAX_CUSTOM_PRESETS}
+              onClick={() => importInputRef.current?.click()}
+            >
+              読み込み
+            </button>
+            <button
+              disabled={!selectedPreset}
+              onClick={() => {
+                setSelectedPresetId("");
+                setAppliedPresetId("");
+                setPresetName("");
+                setIncludeWindowSize(false);
+                setPresetMessage("");
+              }}
+            >
+              新規
+            </button>
+            <button
+              className="presetDelete"
+              disabled={!selectedPreset}
+              onClick={() => {
+                if (!selectedPreset) return;
+                onDeletePreset(selectedPreset.id);
+                setSelectedPresetId("");
+                setAppliedPresetId("");
+                setPresetName("");
+                setIncludeWindowSize(false);
+                setPresetMessage("削除しました");
+              }}
+            >
+              削除
+            </button>
+          </div>
+        </SettingsSection>
+
+        <SettingsSection title="スタイル">
 
           <FontSelect
             label="英数字フォント"
@@ -772,17 +1227,56 @@ function SettingsPanel({
             value={settings.backgroundStyle}
             options={[
               ["dark", "ダーク"],
-              ["vivid", "ビビッド"],
+              ["vivid", "カラー"],
               ["frost", "フロスト"],
               ["glass", "ミラー"],
             ]}
             onSelect={(backgroundStyle) => update({ backgroundStyle })}
           />
 
-        </section>
+          <label
+            className={`settingRow ${
+              settings.backgroundStyle === "vivid" ? "" : "settingDisabled"
+            }`}
+          >
+            <span>カラー彩度</span>
+            <input
+              type="range"
+              min="100"
+              max="160"
+              step="5"
+              value={settings.colorSaturation}
+              disabled={settings.backgroundStyle !== "vivid"}
+              onChange={(event) =>
+                update({ colorSaturation: Number(event.target.value) })
+              }
+            />
+            <output>{settings.colorSaturation}%</output>
+          </label>
 
-        <section className="settingsSection">
-          <h2>動きと表示</h2>
+          <label
+            className={`settingRow ${
+              settings.backgroundStyle === "glass" ? "" : "settingDisabled"
+            }`}
+          >
+            <span>ミラー反射</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={settings.glassReflection}
+              disabled={settings.backgroundStyle !== "glass"}
+              onChange={(event) =>
+                update({ glassReflection: Number(event.target.value) })
+              }
+            />
+            <output>{settings.glassReflection}%</output>
+          </label>
+
+        </SettingsSection>
+
+        <SettingsSection title="動きと表示">
 
           <OptionPicker
             label="切り替え"
@@ -916,13 +1410,48 @@ function SettingsPanel({
             />
             <output>{settings.discSpinSeconds}秒/周</output>
           </label>
-        </section>
+        </SettingsSection>
 
-        <button className="settingsReset" onClick={onReset}>
+        <button
+          className="settingsReset"
+          onClick={() => {
+            setPresetMessage("");
+            onReset();
+          }}
+        >
           初期値に戻す
         </button>
       </div>
     </main>
+  );
+}
+
+function SettingsSection({
+  title,
+  className = "",
+  children,
+}: {
+  title: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <section
+      className={`settingsSection ${className} ${open ? "" : "sectionCollapsed"}`}
+    >
+      <button
+        className="settingsSectionToggle"
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <h2>{title}</h2>
+        <span aria-hidden="true">⌄</span>
+      </button>
+      {open && <div className="settingsSectionContent">{children}</div>}
+    </section>
   );
 }
 
@@ -1004,6 +1533,7 @@ function TrackLayer({
   progressBarEnabled,
   backgroundStyle,
   blurPx,
+  colorSaturation,
 }: {
   track: Track;
   phase: TrackLayerPhase;
@@ -1011,6 +1541,7 @@ function TrackLayer({
   progressBarEnabled: boolean;
   backgroundStyle: BackgroundStyle;
   blurPx: number;
+  colorSaturation: number;
 }) {
   const artworkAnalysis = useArtworkAnalysis(track.image_url);
   const textInfoRef = useRef<HTMLDivElement>(null);
@@ -1030,7 +1561,8 @@ function TrackLayer({
   const adaptiveStyle = createAdaptiveArtworkStyle(
     artworkAnalysis,
     backgroundStyle,
-    blurPx
+    blurPx,
+    colorSaturation
   );
   const layerStyle = {
     ...adaptiveStyle,
@@ -1230,16 +1762,18 @@ function rgbChannels(color: ArtworkAnalysis["accent"]) {
 function createAdaptiveArtworkStyle(
   analysis: ArtworkAnalysis | null,
   backgroundStyle: BackgroundStyle,
-  blurPx: number
+  blurPx: number,
+  colorSaturation: number
 ) {
   const sourceLuminance = analysis?.luminance ?? 0.35;
+  const colorStrength = clamp((colorSaturation - 100) / 60, 0, 1);
   const effectiveLuminance =
     backgroundStyle === "frost"
       ? clamp(0.62 + sourceLuminance * 0.28, 0, 1)
       : backgroundStyle === "glass"
         ? clamp(0.2 + sourceLuminance * 0.62, 0, 1)
       : backgroundStyle === "vivid"
-        ? clamp(sourceLuminance * 0.82, 0, 1)
+        ? clamp(sourceLuminance * (0.94 - colorStrength * 0.12), 0, 1)
         : clamp(sourceLuminance * 0.55, 0, 1);
   const useDarkForeground = effectiveLuminance >= 0.58;
   const detailFactor = 1 - clamp(blurPx / 24, 0, 1);
@@ -1248,7 +1782,7 @@ function createAdaptiveArtworkStyle(
     : effectiveLuminance;
   const modeShadowBase =
     backgroundStyle === "vivid"
-      ? 0.38
+      ? 0.3 + colorStrength * 0.08
       : backgroundStyle === "frost"
         ? 0.2
         : backgroundStyle === "glass"
@@ -1266,7 +1800,7 @@ function createAdaptiveArtworkStyle(
     : { red: 255, green: 255, blue: 255 };
   const modeAccentMix =
     backgroundStyle === "vivid"
-      ? 0.32
+      ? 0.22 + colorStrength * 0.1
       : backgroundStyle === "frost"
         ? 0.24
         : backgroundStyle === "glass"
@@ -1281,7 +1815,7 @@ function createAdaptiveArtworkStyle(
   const shadowChannels = useDarkForeground ? "255 255 255" : "0 0 0";
   const trackAlpha = clamp(
     (backgroundStyle === "vivid"
-      ? 0.3
+      ? 0.24 + colorStrength * 0.06
       : backgroundStyle === "glass"
         ? 0.28
         : 0.22) + detailFactor * 0.13,

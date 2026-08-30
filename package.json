@@ -1,7 +1,7 @@
 {
   "name": "spotify-now-playing-widget",
   "private": true,
-  "version": "0.8.12",
+  "version": "0.8.18",
   "type": "module",
   "scripts": {
     "dev": "vite",
